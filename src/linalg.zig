@@ -1855,6 +1855,40 @@ pub fn Mirror3Type(comptime Scalar: type) type {
     };
 }
 
+/// Spatial transform combining translation, rotation, and non-uniform scale.
+/// Composes to Mat4 in TRS order: scale first, then rotation, then translation.
+pub fn TransformType(comptime Scalar: type) type {
+    const Vec3S = VecType(3, Scalar);
+    const Mat4S = MatType(4, Scalar);
+    const Rot3S = Rotor3Type(Scalar);
+
+    return struct {
+        const Self = @This();
+
+        translation: Vec3S = Vec3S.zero,
+        rotation: Rot3S = Rot3S.identity,
+        scaling: Vec3S = Vec3S.init(.{ 1, 1, 1 }),
+
+        pub const identity: Self = .{};
+
+        /// Convert to a column-major 4×4 matrix: T * R * S.
+        pub fn toMat4(self: Self) Mat4S {
+            const t = Mat4S.translation(self.translation);
+            const r = self.rotation.toMat4();
+            const s = Mat4S.scaling(self.scaling);
+            return t.mul(r.mul(s));
+        }
+
+        pub fn fromTranslation(v: Vec3S) Self {
+            return .{ .translation = v };
+        }
+
+        pub fn fromRotation(r: Rot3S) Self {
+            return .{ .rotation = r };
+        }
+    };
+}
+
 const Rot2 = Rotor2Type(f32);
 const Rot3 = Rotor3Type(f32);
 
@@ -1869,6 +1903,8 @@ const Versor3d = Versor3Type(f64);
 
 const Mirror2 = Mirror2Type(f32);
 const Mirror3 = Mirror3Type(f32);
+
+const Transform = TransformType(f32);
 
 const eps_normal: f32 = @sqrt(math.floatEps(f32));
 const eps_loose: f32 = 1e-3;
@@ -3016,4 +3052,48 @@ test "Mirror3: preserves length" {
     const v = Vec3.init(.{ 3, 4, 5 });
     const reflected = m.applyDir(v);
     try std.testing.expect(@abs(v.len() - reflected.len()) <= eps_normal);
+}
+
+// ── Transform tests ──
+
+test "Transform: identity produces identity matrix" {
+    const t = Transform.identity;
+    const m = t.toMat4();
+    inline for (0..4) |col| {
+        inline for (0..4) |row| {
+            const expected: f32 = if (col == row) 1.0 else 0.0;
+            try std.testing.expectApproxEqAbs(expected, m.m[col][row], 1e-6);
+        }
+    }
+}
+
+test "Transform: translation-only" {
+    const t = Transform.fromTranslation(Vec3.init(.{ 3, 4, 5 }));
+    const m = t.toMat4();
+    const expected = Mat4.translation(Vec3.init(.{ 3, 4, 5 }));
+    try std.testing.expect(m.eql(expected, eps_normal));
+}
+
+test "Transform: rotation-only" {
+    const axis = Vec3.init(.{ 0, 1, 0 });
+    const angle: f32 = math.pi / 4.0;
+    const rot = Rot3.fromAxisAngle(angle, axis);
+    const t = Transform.fromRotation(rot);
+    const m = t.toMat4();
+    const expected = rot.toMat4();
+    try std.testing.expect(m.eql(expected, eps_normal));
+}
+
+test "Transform: TRS applies scale then rotation then translation" {
+    const t = Transform{
+        .translation = Vec3.init(.{ 10, 0, 0 }),
+        .rotation = Rot3.identity,
+        .scaling = Vec3.init(.{ 2, 2, 2 }),
+    };
+    const m = t.toMat4();
+    const point = Vec3.init(.{ 1, 0, 0 });
+    const result = m.mulVec(Vec4.init(.{ point.v[0], point.v[1], point.v[2], 1.0 }));
+    try std.testing.expectApproxEqAbs(@as(f32, 12.0), result.v[0], 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), result.v[1], 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), result.v[2], 1e-6);
 }

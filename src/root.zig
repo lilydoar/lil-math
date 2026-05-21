@@ -130,8 +130,9 @@ pub const Mirror3d = linalg.Mirror3Type(f64);
 pub const Mirror2Type = linalg.Mirror2Type;
 pub const Mirror3Type = linalg.Mirror3Type;
 
-const transform_mod = @import("transform.zig");
-pub const Transform = transform_mod.Transform;
+pub const Transform = linalg.TransformType(f32);
+pub const Transformd = linalg.TransformType(f64);
+pub const TransformType = linalg.TransformType;
 
 pub const VecType = linalg.VecType;
 pub const MatType = linalg.MatType;
@@ -158,5 +159,4 @@ test {
     _ = @import("halfedge.zig");
     _ = @import("interp.zig");
     _ = @import("linalg.zig");
-    _ = @import("transform.zig");
 }
