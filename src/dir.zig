@@ -34,7 +34,29 @@ const Vec3i = linalg.VecType(3, i32);
 // Dir4
 // ---------------------------------------------------------------------------
 
-// TODO: Dir2
+/// 2 directions on a 1D axis: positive (+X) and negative (−X).
+///
+/// Backed by `u1`.
+pub const Dir2 = enum(u1) {
+    pos = 0,
+    neg = 1,
+
+    /// Both directions in enum order.
+    pub const all: [2]Dir2 = .{ .pos, .neg };
+
+    /// Unit step in this direction as a signed integer (+1 or −1).
+    pub fn forward(self: Dir2) i32 {
+        return switch (self) {
+            .pos => 1,
+            .neg => -1,
+        };
+    }
+
+    /// The opposite direction.
+    pub fn opposite(self: Dir2) Dir2 {
+        return @enumFromInt(@as(u1, @intFromEnum(self)) +% 1);
+    }
+};
 
 /// 4 cardinal directions on a 2D grid.
 ///

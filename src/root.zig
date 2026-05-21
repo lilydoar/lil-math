@@ -84,11 +84,13 @@ pub const Sphere = geometry.SphereType(3, f32);
 pub const Circled = geometry.SphereType(2, f64);
 pub const Sphered = geometry.SphereType(3, f64);
 
+pub const Dir2 = direction.Dir2;
 pub const Dir4 = direction.Dir4;
 pub const Dir8 = direction.Dir8;
 pub const Dir6 = direction.Dir6;
 pub const Dir26 = direction.Dir26;
 
+pub const DirSet2 = direction.DirSetType(direction.Dir2);
 pub const DirSet4 = direction.DirSetType(direction.Dir4);
 pub const DirSet8 = direction.DirSetType(direction.Dir8);
 pub const DirSet6 = direction.DirSetType(direction.Dir6);
