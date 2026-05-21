@@ -294,7 +294,7 @@ pub fn SphereType(comptime n: comptime_int, comptime Scalar: type) type {
         /// If one sphere contains the other, returns the larger sphere.
         pub inline fn merge(self: Self, other: Self) Self {
             const d_vec = other.center.sub(self.center);
-            const dist = d_vec.length();
+            const dist = d_vec.len();
             if (dist + other.radius <= self.radius) return self;
             if (dist + self.radius <= other.radius) return other;
             const new_radius = (dist + self.radius + other.radius) * 0.5;

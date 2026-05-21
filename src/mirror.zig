@@ -144,7 +144,7 @@ test "Mirror3: preserves length" {
     const m = Mirror3.fromNormal(Vec3.init(.{ s3, s3, s3 }));
     const v = Vec3.init(.{ 3, 4, 5 });
     const reflected = m.applyDir(v);
-    try std.testing.expect(approx.eql(v.length(), reflected.length()));
+    try std.testing.expect(approx.eql(v.len(), reflected.len()));
 }
 
 test "Mirror2: acrossY reflects X" {

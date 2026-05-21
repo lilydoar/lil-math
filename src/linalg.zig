@@ -156,20 +156,20 @@ pub fn VecType(comptime n: comptime_int, comptime Scalar: type) type {
 
         /// Returns the Euclidean length.
         /// Only available for float scalar types.
-        pub const length = if (is_float) struct {
+        pub const len = if (is_float) struct {
             fn f(a: Self) Scalar {
                 return @sqrt(@reduce(.Add, a.v * a.v));
             }
-        }.f else @compileError("length() requires a float scalar type");
+        }.f else @compileError("len() requires a float scalar type");
 
         /// Returns a unit vector in the same direction as `a`.
         /// Returns the zero vector if `a` has zero length.
         /// Only available for float scalar types.
         pub const normalize = if (is_float) struct {
             fn f(a: Self) Self {
-                const len = a.length();
-                if (len == 0) return .{ .v = @splat(0) };
-                return .{ .v = a.v / @as(@Vector(n, Scalar), @splat(len)) };
+                const l = a.len();
+                if (l == 0) return .{ .v = @splat(0) };
+                return .{ .v = a.v / @as(@Vector(n, Scalar), @splat(l)) };
             }
         }.f else @compileError("normalize() requires a float scalar type");
 
@@ -1287,13 +1287,13 @@ pub fn Versor2Type(comptime Scalar: type) type {
         // -----------------------------------------------------------------
 
         /// Squared norm of the versor.
-        pub inline fn lengthSq(self: Self) Scalar {
+        pub inline fn lenSqr(self: Self) Scalar {
             return self.c[0] * self.c[0] + self.c[1] * self.c[1];
         }
 
         /// Normalize to unit length.
         pub inline fn normalize(self: Self) Self {
-            const inv_len = 1.0 / @sqrt(self.lengthSq());
+            const inv_len = 1.0 / @sqrt(self.lenSqr());
             return .{ .c = .{ self.c[0] * inv_len, self.c[1] * inv_len }, .parity = self.parity };
         }
 
@@ -1630,13 +1630,13 @@ pub fn Versor3Type(comptime Scalar: type) type {
         // -----------------------------------------------------------------
 
         /// Squared norm of the versor.
-        pub inline fn lengthSq(self: Self) Scalar {
+        pub inline fn lenSqr(self: Self) Scalar {
             return self.c[0] * self.c[0] + self.c[1] * self.c[1] + self.c[2] * self.c[2] + self.c[3] * self.c[3];
         }
 
         /// Normalize to unit length.
         pub inline fn normalize(self: Self) Self {
-            const inv_len = 1.0 / @sqrt(self.lengthSq());
+            const inv_len = 1.0 / @sqrt(self.lenSqr());
             return .{
                 .c = .{ self.c[0] * inv_len, self.c[1] * inv_len, self.c[2] * inv_len, self.c[3] * inv_len },
                 .parity = self.parity,
@@ -1821,11 +1821,11 @@ test "Vec: dot product" {
 test "Vec: length and normalize" {
     const v = Vec3.init(.{ 3, 4, 0 });
     try std.testing.expectEqual(@as(f32, 25), v.lenSqr());
-    try std.testing.expectEqual(@as(f32, 5), v.length());
+    try std.testing.expectEqual(@as(f32, 5), v.len());
 
     const n = v.normalize();
     const eps = @sqrt(math.floatEps(f32));
-    try std.testing.expect(@abs(n.length() - 1.0) < eps);
+    try std.testing.expect(@abs(n.len() - 1.0) < eps);
     try std.testing.expect(@abs(n.v[0] - 0.6) < eps);
     try std.testing.expect(@abs(n.v[1] - 0.8) < eps);
 }
@@ -2665,7 +2665,7 @@ test "Versor2: slerp between reflections" {
     const mid = Versor2.slerp(r0, r1, 0.5);
     try std.testing.expectEqual(Versor2.Parity.odd, mid.parity);
     // Midpoint should be unit length
-    try std.testing.expect(approx_normal.eql(mid.lengthSq(), @as(f32, 1.0)));
+    try std.testing.expect(approx_normal.eql(mid.lenSqr(), @as(f32, 1.0)));
 }
 
 // ── Versor3 tests ──
@@ -2802,7 +2802,7 @@ test "Versor3: reflection preserves length" {
     const refl = Versor3.fromReflection(Vec3.init(.{ 0.5774, 0.5774, 0.5774 }).normalize());
     const v = Vec3.init(.{ 3, 4, 5 });
     const result = refl.apply(v);
-    try std.testing.expect(approx_normal.eql(v.length(), result.length()));
+    try std.testing.expect(approx_normal.eql(v.len(), result.len()));
 }
 
 test "Versor3: reverse inverts transformation" {
@@ -2835,7 +2835,7 @@ test "Versor3: slerp between reflections" {
     const r1 = Versor3.fromReflection(Vec3.init(.{ 0, 1, 0 }));
     const mid = Versor3.slerp(r0, r1, 0.5);
     try std.testing.expectEqual(Versor3.Parity.odd, mid.parity);
-    try std.testing.expect(approx_normal.eql(mid.lengthSq(), @as(f32, 1.0)));
+    try std.testing.expect(approx_normal.eql(mid.lenSqr(), @as(f32, 1.0)));
 }
 
 test "Versor3: det" {
