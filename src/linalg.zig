@@ -1764,6 +1764,97 @@ pub fn Versor3Type(comptime Scalar: type) type {
     };
 }
 
+/// Affine reflection across a 2D line.
+/// `p' = p − 2·dot(p − origin, normal) · normal`
+pub fn Mirror2Type(comptime Scalar: type) type {
+    const Vec2S = VecType(2, Scalar);
+    const Versor2S = Versor2Type(Scalar);
+
+    return struct {
+        const Self = @This();
+
+        /// Unit normal of the mirror line.
+        normal: Vec2S,
+        /// A point on the mirror line. Defaults to the origin.
+        origin: Vec2S = Vec2S.zero,
+
+        pub const acrossY = Self{ .normal = Vec2S.init(.{ 1, 0 }) };
+        pub const acrossX = Self{ .normal = Vec2S.init(.{ 0, 1 }) };
+
+        pub fn fromNormal(normal: Vec2S) Self {
+            return .{ .normal = normal };
+        }
+
+        pub fn fromPlane(normal: Vec2S, origin: Vec2S) Self {
+            return .{ .normal = normal, .origin = origin };
+        }
+
+        /// Reflect a point (affine — accounts for origin offset).
+        pub fn applyPoint(self: Self, point: Vec2S) Vec2S {
+            const diff = point.sub(self.origin);
+            const d: Scalar = @as(Scalar, 2) * diff.dot(self.normal);
+            return point.sub(self.normal.scale(d));
+        }
+
+        /// Reflect a direction (translation-invariant — ignores origin).
+        pub fn applyDir(self: Self, dir: Vec2S) Vec2S {
+            const d: Scalar = @as(Scalar, 2) * dir.dot(self.normal);
+            return dir.sub(self.normal.scale(d));
+        }
+
+        /// Return the underlying odd versor (linear part only, no origin offset).
+        pub fn toVersor(self: Self) Versor2S {
+            return Versor2S.fromReflection(self.normal);
+        }
+    };
+}
+
+/// Affine reflection across a 3D plane.
+/// `p' = p − 2·dot(p − origin, normal) · normal`
+pub fn Mirror3Type(comptime Scalar: type) type {
+    const Vec3S = VecType(3, Scalar);
+    const Versor3S = Versor3Type(Scalar);
+
+    return struct {
+        const Self = @This();
+
+        /// Unit normal of the mirror plane.
+        normal: Vec3S,
+        /// A point on the mirror plane. Defaults to the origin.
+        origin: Vec3S = Vec3S.zero,
+
+        pub const acrossYZ = Self{ .normal = Vec3S.init(.{ 1, 0, 0 }) };
+        pub const acrossXZ = Self{ .normal = Vec3S.init(.{ 0, 1, 0 }) };
+        pub const acrossXY = Self{ .normal = Vec3S.init(.{ 0, 0, 1 }) };
+
+        pub fn fromNormal(normal: Vec3S) Self {
+            return .{ .normal = normal };
+        }
+
+        pub fn fromPlane(normal: Vec3S, origin: Vec3S) Self {
+            return .{ .normal = normal, .origin = origin };
+        }
+
+        /// Reflect a point (affine — accounts for origin offset).
+        pub fn applyPoint(self: Self, point: Vec3S) Vec3S {
+            const diff = point.sub(self.origin);
+            const d: Scalar = @as(Scalar, 2) * diff.dot(self.normal);
+            return point.sub(self.normal.scale(d));
+        }
+
+        /// Reflect a direction (translation-invariant — ignores origin).
+        pub fn applyDir(self: Self, dir: Vec3S) Vec3S {
+            const d: Scalar = @as(Scalar, 2) * dir.dot(self.normal);
+            return dir.sub(self.normal.scale(d));
+        }
+
+        /// Return the underlying odd versor (linear part only, no origin offset).
+        pub fn toVersor(self: Self) Versor3S {
+            return Versor3S.fromReflection(self.normal);
+        }
+    };
+}
+
 const Rot2 = Rotor2Type(f32);
 const Rot3 = Rotor3Type(f32);
 
@@ -1775,6 +1866,9 @@ const Versor3 = Versor3Type(f32);
 
 const Versor2d = Versor2Type(f64);
 const Versor3d = Versor3Type(f64);
+
+const Mirror2 = Mirror2Type(f32);
+const Mirror3 = Mirror3Type(f32);
 
 const eps_normal: f32 = @sqrt(math.floatEps(f32));
 const eps_loose: f32 = 1e-3;
@@ -2836,4 +2930,90 @@ test "Versor3: det" {
     try std.testing.expectEqual(@as(f32, 1), rot.det());
     const refl = Versor3.fromReflection(Vec3.init(.{ 1, 0, 0 }));
     try std.testing.expectEqual(@as(f32, -1), refl.det());
+}
+
+// ── Mirror2 tests ──
+
+test "Mirror2: acrossY reflects X" {
+    const m = Mirror2.acrossY;
+    const result = m.applyPoint(Vec2.init(.{ 3, 4 }));
+    try std.testing.expect(result.eql(Vec2.init(.{ -3, 4 }), eps_normal));
+}
+
+test "Mirror2: acrossX reflects Y" {
+    const m = Mirror2.acrossX;
+    const result = m.applyPoint(Vec2.init(.{ 3, 4 }));
+    try std.testing.expect(result.eql(Vec2.init(.{ 3, -4 }), eps_normal));
+}
+
+test "Mirror2: offset origin" {
+    const m = Mirror2.fromPlane(Vec2.init(.{ 1, 0 }), Vec2.init(.{ 5, 0 }));
+    const result = m.applyPoint(Vec2.init(.{ 3, 7 }));
+    // 3 is 2 left of X=5, reflected to X=7
+    try std.testing.expect(result.eql(Vec2.init(.{ 7, 7 }), eps_normal));
+}
+
+test "Mirror2: toVersor matches applyDir" {
+    const s2: f32 = 1.0 / @sqrt(2.0);
+    const m = Mirror2.fromNormal(Vec2.init(.{ s2, s2 }));
+    const versor = m.toVersor();
+    const v = Vec2.init(.{ 1, 0 });
+    try std.testing.expect(m.applyDir(v).eql(versor.apply(v), eps_normal));
+}
+
+// ── Mirror3 tests ──
+
+test "Mirror3: acrossYZ reflects X" {
+    const m = Mirror3.acrossYZ;
+    const result = m.applyPoint(Vec3.init(.{ 3, 4, 5 }));
+    try std.testing.expect(result.eql(Vec3.init(.{ -3, 4, 5 }), eps_normal));
+}
+
+test "Mirror3: acrossXZ reflects Y" {
+    const m = Mirror3.acrossXZ;
+    const result = m.applyPoint(Vec3.init(.{ 3, 4, 5 }));
+    try std.testing.expect(result.eql(Vec3.init(.{ 3, -4, 5 }), eps_normal));
+}
+
+test "Mirror3: acrossXY reflects Z" {
+    const m = Mirror3.acrossXY;
+    const result = m.applyPoint(Vec3.init(.{ 3, 4, 5 }));
+    try std.testing.expect(result.eql(Vec3.init(.{ 3, 4, -5 }), eps_normal));
+}
+
+test "Mirror3: offset origin" {
+    // Mirror at Y=5, normal = +Y
+    const m = Mirror3.fromPlane(Vec3.init(.{ 0, 1, 0 }), Vec3.init(.{ 0, 5, 0 }));
+    const result = m.applyPoint(Vec3.init(.{ 1, 3, 0 }));
+    // 3 is 2 below Y=5, so reflected to Y=7
+    try std.testing.expect(result.eql(Vec3.init(.{ 1, 7, 0 }), eps_normal));
+}
+
+test "Mirror3: applyDir ignores origin" {
+    const m = Mirror3.fromPlane(Vec3.init(.{ 1, 0, 0 }), Vec3.init(.{ 100, 0, 0 }));
+    const result = m.applyDir(Vec3.init(.{ 1, 0, 0 }));
+    try std.testing.expect(result.eql(Vec3.init(.{ -1, 0, 0 }), eps_normal));
+}
+
+test "Mirror3: double reflection is identity" {
+    const m = Mirror3.fromNormal(Vec3.init(.{ 0, 0, 1 }));
+    const v = Vec3.init(.{ 3, 4, 5 });
+    const result = m.applyPoint(m.applyPoint(v));
+    try std.testing.expect(result.eql(v, eps_normal));
+}
+
+test "Mirror3: toVersor matches applyDir" {
+    const s2: f32 = 1.0 / @sqrt(2.0);
+    const m = Mirror3.fromNormal(Vec3.init(.{ s2, s2, 0 }));
+    const versor = m.toVersor();
+    const v = Vec3.init(.{ 1, 0, 0 });
+    try std.testing.expect(m.applyDir(v).eql(versor.apply(v), eps_normal));
+}
+
+test "Mirror3: preserves length" {
+    const s3: f32 = 1.0 / @sqrt(3.0);
+    const m = Mirror3.fromNormal(Vec3.init(.{ s3, s3, s3 }));
+    const v = Vec3.init(.{ 3, 4, 5 });
+    const reflected = m.applyDir(v);
+    try std.testing.expect(@abs(v.len() - reflected.len()) <= eps_normal);
 }

@@ -121,15 +121,14 @@ pub const InterpVersor2d = interp.InterpVersor2d;
 pub const InterpVersor3d = interp.InterpVersor3d;
 pub const Blend = interp.Blend;
 
-const mirror = @import("mirror.zig");
+pub const Mirror2 = linalg.Mirror2Type(f32);
+pub const Mirror3 = linalg.Mirror3Type(f32);
 
-pub const Mirror2 = mirror.MirrorType(2, f32);
-pub const Mirror3 = mirror.MirrorType(3, f32);
+pub const Mirror2d = linalg.Mirror2Type(f64);
+pub const Mirror3d = linalg.Mirror3Type(f64);
 
-pub const Mirror2d = mirror.MirrorType(2, f64);
-pub const Mirror3d = mirror.MirrorType(3, f64);
-
-pub const MirrorType = mirror.MirrorType;
+pub const Mirror2Type = linalg.Mirror2Type;
+pub const Mirror3Type = linalg.Mirror3Type;
 
 const transform_mod = @import("transform.zig");
 pub const Transform = transform_mod.Transform;
@@ -159,6 +158,5 @@ test {
     _ = @import("halfedge.zig");
     _ = @import("interp.zig");
     _ = @import("linalg.zig");
-    _ = @import("mirror.zig");
     _ = @import("transform.zig");
 }
