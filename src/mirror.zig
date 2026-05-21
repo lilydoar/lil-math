@@ -10,6 +10,9 @@
 
 const linalg = @import("linalg.zig");
 
+// TODO: Separate MirrorType into Mirror2 and Mirror3. This impl does not benefit from comptime generic dimension, only scalar type.
+// TODO: Move Mirror type code into linalg.zig
+
 pub fn MirrorType(comptime n: comptime_int, comptime Scalar: type) type {
     if (n != 2 and n != 3) @compileError("MirrorType only supports n=2 or n=3");
 

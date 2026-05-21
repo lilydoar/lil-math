@@ -5,6 +5,8 @@
 //! then rotation, then translation — matching the convention used by most
 //! real-time renderers and game engines.
 
+// TODO: Move Transform into linalg. This is really just a convenience wrapper
+
 const std = @import("std");
 const root = @import("root.zig");
 

@@ -72,7 +72,7 @@ pub fn InterpType(comptime T: type, comptime blendFn: *const fn (T, T, f32) T) t
         end: T,
         /// Absolute time (same unit as arguments to `get`/`set`) at which the
         /// current transition began.
-        start_time: f32,
+        start_time: f32, // TODO: Generic time scalar type, don't force f32
         /// Reciprocal of the transition duration in time units.
         /// A `speed` of 2.0 means the transition completes in 0.5 time units.
         /// Defaults to 1.0 (one time unit per transition). Set via `setDuration`.

@@ -79,18 +79,18 @@ pub fn SegmentType(comptime n: comptime_int, comptime Scalar: type) type {
         }
 
         /// Returns the squared length of the segment.
-        pub inline fn lengthSq(self: Self) Scalar {
+        pub inline fn lenSqr(self: Self) Scalar {
             const d = self.b.sub(self.a);
             return d.dot(d);
         }
 
         /// Returns the length of the segment.
         /// Only available for float scalar types.
-        pub const length = if (is_float) struct {
+        pub const len = if (is_float) struct {
             fn f(self: Self) Scalar {
-                return @sqrt(self.lengthSq());
+                return @sqrt(self.lenSqr());
             }
-        }.f else @compileError("length() requires a float scalar type");
+        }.f else @compileError("len() requires a float scalar type");
 
         /// Returns the closest point on the segment to point `p`.
         /// Clamps the projection to the segment's endpoints.
@@ -120,6 +120,8 @@ const Segment3d = SegmentType(3, f64);
 pub fn AabbType(comptime n: comptime_int, comptime Scalar: type) type {
     const Vec = linalg.VecType(n, Scalar);
     const is_float = @typeInfo(Scalar) == .float;
+
+    // TODO: Union style structure to allow for min,max repr and half extent repr
 
     return struct {
         const Self = @This();
@@ -261,19 +263,19 @@ pub fn SphereType(comptime n: comptime_int, comptime Scalar: type) type {
 
         /// Returns true if point `p` is inside the sphere (inclusive of boundary).
         pub inline fn contains(self: Self, p: Vec) bool {
-            return self.center.sub(p).lengthSq() <= self.radius * self.radius;
+            return self.center.sub(p).lenSqr() <= self.radius * self.radius;
         }
 
         /// Returns true if this sphere overlaps with `other`.
         pub inline fn intersects(self: Self, other: Self) bool {
             const r = self.radius + other.radius;
-            return self.center.sub(other.center).lengthSq() <= r * r;
+            return self.center.sub(other.center).lenSqr() <= r * r;
         }
 
         /// Returns true if this sphere overlaps with the given AABB.
         pub inline fn intersectsAabb(self: Self, box: AabbType(n, Scalar)) bool {
             const closest = box.closestPoint(self.center);
-            return self.center.sub(closest).lengthSq() <= self.radius * self.radius;
+            return self.center.sub(closest).lenSqr() <= self.radius * self.radius;
         }
 
         /// Returns the nearest ray parameter t at which the ray enters the sphere,
@@ -344,8 +346,8 @@ test "Segment: length and midpoint" {
         Vec3.init(.{ 0, 0, 0 }),
         Vec3.init(.{ 3, 4, 0 }),
     );
-    try std.testing.expectEqual(@as(f32, 25), seg.lengthSq());
-    try std.testing.expectEqual(@as(f32, 5), seg.length());
+    try std.testing.expectEqual(@as(f32, 25), seg.lenSqr());
+    try std.testing.expectEqual(@as(f32, 5), seg.len());
     try std.testing.expect(seg.midpoint().eql(Vec3.init(.{ 1.5, 2, 0 })));
 }
 
@@ -557,4 +559,3 @@ test "Ray3: intersectAxisPlane X axis" {
     const t = ray.intersectAxisPlane(0, 2.0) orelse return error.TestUnexpectedResult;
     try expectApproxScalar(t, 5.0);
 }
-

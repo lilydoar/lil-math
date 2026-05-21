@@ -10,106 +10,6 @@
 const std = @import("std");
 const math = std.math;
 
-/// Named tolerance levels for floating-point comparisons.
-///
-/// Forces callers to be explicit about acceptable error at comparison sites.
-/// No runtime cost — the tolerance class is a comptime parameter that selects
-/// an epsilon value, and the comparison inlines to a single abs-diff check.
-pub const Tolerance = enum(u2) {
-    /// Machine epsilon — appropriate for results of a single arithmetic operation.
-    tight = 0,
-    /// √(machine epsilon) — appropriate for composed operations (normalize, inverse, etc.).
-    normal = 1,
-    /// 1e-3 — appropriate for round-trips, fuzz tests, and long operation chains.
-    loose = 2,
-
-    /// Returns the concrete epsilon value for a given float type.
-    pub fn epsilon(comptime self: Tolerance, comptime T: type) T {
-        return switch (self) {
-            .tight => math.floatEps(T),
-            .normal => @sqrt(math.floatEps(T)),
-            .loose => 1e-3,
-        };
-    }
-};
-
-/// Comptime comparison namespace parameterized by tolerance level.
-///
-/// Works on scalars (f32, f64), VecType, MatType, and Rotor types without
-/// changing their layout. Zero-size type — no instances, just a namespace.
-///
-/// Usage:
-///   const approx = Approx(.normal);
-///   if (approx.eql(a, b)) { ... }
-pub fn Approx(comptime tol: Tolerance) type {
-    return struct {
-        pub inline fn eql(a: anytype, b: @TypeOf(a)) bool {
-            const T = @TypeOf(a);
-            const info = @typeInfo(T);
-
-            // Raw float scalar
-            if (info == .float) {
-                const eps = tol.epsilon(T);
-                return @abs(a - b) <= eps;
-            }
-
-            // Struct — dispatch on field layout
-            if (info == .@"struct") {
-                const fields = info.@"struct".fields;
-
-                // Extract scalar type at comptime
-                const Scalar = comptime blk: {
-                    for (fields) |field| {
-                        if (@typeInfo(field.type) == .vector)
-                            break :blk @typeInfo(field.type).vector.child;
-                        if (@typeInfo(field.type) == .float)
-                            break :blk field.type;
-                        if (@typeInfo(field.type) == .array) {
-                            const child = @typeInfo(field.type).array.child;
-                            if (@typeInfo(child) == .vector)
-                                break :blk @typeInfo(child).vector.child;
-                        }
-                    }
-                    @compileError("Approx.eql: no float or vector field found in " ++ @typeName(T));
-                };
-
-                const eps: Scalar = tol.epsilon(Scalar);
-
-                inline for (fields) |field| {
-                    const fa = @field(a, field.name);
-                    const fb = @field(b, field.name);
-                    const FT = @TypeOf(fa);
-
-                    if (@typeInfo(FT) == .vector) {
-                        const len = @typeInfo(FT).vector.len;
-                        inline for (0..len) |i| {
-                            if (@abs(fa[i] - fb[i]) > eps) return false;
-                        }
-                    } else if (@typeInfo(FT) == .float) {
-                        if (@abs(fa - fb) > eps) return false;
-                    } else if (@typeInfo(FT) == .array) {
-                        const arr_len = @typeInfo(FT).array.len;
-                        inline for (0..arr_len) |j| {
-                            const aj = fa[j];
-                            const bj = fb[j];
-                            const ET = @TypeOf(aj);
-                            if (@typeInfo(ET) == .vector) {
-                                const vec_len = @typeInfo(ET).vector.len;
-                                inline for (0..vec_len) |i| {
-                                    if (@abs(aj[i] - bj[i]) > eps) return false;
-                                }
-                            }
-                        }
-                    }
-                }
-                return true;
-            }
-
-            @compileError("Approx.eql: unsupported type " ++ @typeName(T));
-        }
-    };
-}
-
 /// Generic N-dimensional vector backed by `@Vector(n, Scalar)`.
 /// Float-only operations (normalize, lerp, etc.) are gated at comptime.
 pub fn VecType(comptime n: comptime_int, comptime Scalar: type) type {
@@ -240,7 +140,7 @@ pub fn VecType(comptime n: comptime_int, comptime Scalar: type) type {
 
         /// Returns the squared Euclidean length. Prefer over `length` when
         /// only comparing magnitudes.
-        pub inline fn lengthSq(a: Self) Scalar {
+        pub inline fn lenSqr(a: Self) Scalar {
             return @reduce(.Add, a.v * a.v);
         }
 
@@ -841,6 +741,7 @@ pub fn MatType(comptime n: comptime_int, comptime Scalar: type) type {
     };
 }
 
+// TODO: Remove file wide declarations. Use non pub declarations within a struct/namespace
 const Vec2 = VecType(2, f32);
 const Vec3 = VecType(3, f32);
 const Vec4 = VecType(4, f32);
@@ -982,6 +883,7 @@ pub fn Rotor2Type(comptime Scalar: type) type {
                 d = -d;
                 to_adj = .{ .a = -to.a, .b = -to.b };
             }
+            // TODO: Use a more exact value here
             if (d > 0.9995) {
                 return nlerp(from, to_adj, t);
             }
@@ -1244,6 +1146,7 @@ pub fn Rotor3Type(comptime Scalar: type) type {
 ///
 /// See `.pi/journals/2026-03-03-versor-clifford-algebra-verification.md`
 /// for the full derivation and computational verification of all formulas.
+/// TODO: Extract contents of `.pi/journals/2026-03-03-versor-clifford-algebra-verification.md` to local reference
 pub fn Versor2Type(comptime Scalar: type) type {
     const Vec2S = VecType(2, Scalar);
     const Mat2S = MatType(2, Scalar);
@@ -1917,7 +1820,7 @@ test "Vec: dot product" {
 
 test "Vec: length and normalize" {
     const v = Vec3.init(.{ 3, 4, 0 });
-    try std.testing.expectEqual(@as(f32, 25), v.lengthSq());
+    try std.testing.expectEqual(@as(f32, 25), v.lenSqr());
     try std.testing.expectEqual(@as(f32, 5), v.length());
 
     const n = v.normalize();
