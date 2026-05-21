@@ -24,11 +24,9 @@
 //! - **Generic constructors** — `VecType`, `MatType`, `Rotor2Type`, `Rotor3Type`, `Versor2Type`, `Versor3Type`, `MirrorType`, `InterpType`
 
 const linalg = @import("linalg.zig");
-const direction = @import("direction.zig");
+const direction = @import("dir.zig");
 const halfedge = @import("halfedge.zig");
 pub const interp = @import("interp.zig");
-const fixed_point = @import("fixed_point.zig");
-pub const fixed_trig = @import("fixed_trig.zig");
 
 pub const Vec2 = linalg.VecType(2, f32);
 pub const Vec3 = linalg.VecType(3, f32);
@@ -149,41 +147,18 @@ pub const Versor3d = linalg.Versor3Type(f64);
 
 pub const Versor2Type = linalg.Versor2Type;
 pub const Versor3Type = linalg.Versor3Type;
-pub const Tolerance = linalg.Tolerance;
-pub const Approx = linalg.Approx;
 pub const RayType = geometry.RayType;
 pub const SegmentType = geometry.SegmentType;
 pub const AabbType = geometry.AabbType;
 pub const SphereType = geometry.SphereType;
 pub const InterpType = interp.InterpType;
 
-pub const FixedPoint = fixed_point.FixedPoint;
-pub const Q8_8 = FixedPoint(8, 8);
-pub const Q16_16 = FixedPoint(16, 16);
-pub const Q24_8 = FixedPoint(24, 8);
-pub const Q8_24 = FixedPoint(8, 24);
-pub const Q32_32 = FixedPoint(32, 32);
-
-/// Noise algorithms and combinators.
-pub const noise = @import("noise.zig");
-pub const NoiseType = noise.NoiseType;
-pub const ValueNoise = noise.ValueNoise;
-pub const PerlinNoise = noise.PerlinNoise;
-pub const SimplexNoise = noise.SimplexNoise;
-pub const WhiteNoise = noise.WhiteNoise;
-pub const BlueNoise = noise.BlueNoise;
-pub const FbmOptions = noise.FbmOptions;
-pub const GridFillOptions = noise.GridFillOptions;
-
 test {
-    _ = @import("direction.zig");
-    _ = @import("fixed_point.zig");
-    _ = @import("fixed_trig.zig");
+    _ = @import("dir.zig");
     _ = @import("geometry.zig");
     _ = @import("halfedge.zig");
     _ = @import("interp.zig");
     _ = @import("linalg.zig");
     _ = @import("mirror.zig");
-    _ = @import("noise.zig");
     _ = @import("transform.zig");
 }
