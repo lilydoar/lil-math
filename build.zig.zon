@@ -1,0 +1,7 @@
+.{
+    .name = .lil_math,
+    .version = "0.1.0",
+    .fingerprint = 0xb15e2fc176b7347b,
+    .dependencies = .{},
+    .paths = .{""},
+}
