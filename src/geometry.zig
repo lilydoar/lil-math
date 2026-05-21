@@ -207,6 +207,8 @@ pub fn AabbType(comptime n: comptime_int, comptime Scalar: type) type {
             return result;
         }
 
+        // TODO: Remove all intersects functions from geometry.zig. Future plan is collision.zig which contains all primitive types collision math fns (not things like broad phase, narrow phase, spatial, etc, just math).
+
         /// Tests ray intersection using the slab method.
         /// Returns the entry parameter t (may be negative if origin is inside).
         /// Returns null on miss.
@@ -232,6 +234,8 @@ pub fn AabbType(comptime n: comptime_int, comptime Scalar: type) type {
                 return tmin;
             }
         }.f else @compileError("intersectsRay() requires a float scalar type");
+
+        // TODO: Expanded half size
     };
 }
 

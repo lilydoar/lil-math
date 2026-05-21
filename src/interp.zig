@@ -62,7 +62,7 @@ const expectApproxEqAbs = std.testing.expectApproxEqAbs;
 /// // Via InterpType directly with a custom blend:
 /// const MyInterp = InterpType(MyType, &myBlendFn);
 /// ```
-pub fn InterpType(comptime T: type, comptime blendFn: *const fn (T, T, f32) T) type {
+pub fn InterpType(comptime T: type, comptime Time: type, comptime blendFn: *const fn (T, T, f32) T) type {
     return struct {
         /// Value at the beginning of the current transition.
         /// Updated by `set` to the sampled value at the moment of retargeting,
@@ -72,11 +72,11 @@ pub fn InterpType(comptime T: type, comptime blendFn: *const fn (T, T, f32) T) t
         end: T,
         /// Absolute time (same unit as arguments to `get`/`set`) at which the
         /// current transition began.
-        start_time: f32, // TODO: Generic time scalar type, don't force f32
+        start_time: Time,
         /// Reciprocal of the transition duration in time units.
         /// A `speed` of 2.0 means the transition completes in 0.5 time units.
         /// Defaults to 1.0 (one time unit per transition). Set via `setDuration`.
-        speed: f32 = 1.0,
+        speed: Time = 1.0,
         /// Easing curve applied to the normalized `t` before blending.
         /// Must map [0, 1] → [0, 1] with `f(0) == 0` and `f(1) == 1`.
         /// Defaults to `linear`. Assign any function from this module or a custom one.
@@ -98,9 +98,9 @@ pub fn InterpType(comptime T: type, comptime blendFn: *const fn (T, T, f32) T) t
         ///
         /// Returns `end` once the transition is complete. The easing function is
         /// applied to the normalized elapsed time before passing it to the blend kernel.
-        pub fn get(self: Self, current_time: f32) T {
+        pub fn get(self: Self, current_time: Time) T {
             const elapsed = current_time - self.start_time;
-            const t = elapsed * self.speed;
+            const t: f32 = @floatCast(elapsed * self.speed);
             if (t >= 1.0) return self.end;
             const eased = self.easing_fn(t);
             return blendFn(self.start, self.end, eased);
@@ -112,7 +112,7 @@ pub fn InterpType(comptime T: type, comptime blendFn: *const fn (T, T, f32) T) t
         /// `start`, ensuring no discontinuity at the transition boundary.
         /// The speed (duration) from the previous transition is preserved; call
         /// `setDuration` after `set` to change it.
-        pub fn set(self: *Self, new_value: T, current_time: f32) void {
+        pub fn set(self: *Self, new_value: T, current_time: Time) void {
             self.start = self.get(current_time);
             self.end = new_value;
             self.start_time = current_time;
@@ -121,18 +121,19 @@ pub fn InterpType(comptime T: type, comptime blendFn: *const fn (T, T, f32) T) t
         /// Sets the transition duration in time units, updating `speed` accordingly.
         ///
         /// Assumes `duration` is positive and non-zero.
-        pub fn setDuration(self: *Self, duration: f32) void {
+        pub fn setDuration(self: *Self, duration: Time) void {
             self.speed = 1.0 / duration;
         }
 
         /// Returns true when the interpolation has reached its end value.
-        pub fn isDone(self: Self, current_time: f32) bool {
-            return (current_time - self.start_time) * self.speed >= 1.0;
+        pub fn isDone(self: Self, current_time: Time) bool {
+            const t: f32 = @floatCast((current_time - self.start_time) * self.speed);
+            return t >= 1.0;
         }
 
         /// Normalized progress [0, 1]. Clamped — returns 1.0 after completion.
-        pub fn progress(self: Self, current_time: f32) f32 {
-            const t = (current_time - self.start_time) * self.speed;
+        pub fn progress(self: Self, current_time: Time) f32 {
+            const t: f32 = @floatCast((current_time - self.start_time) * self.speed);
             return @min(1.0, @max(0.0, t));
         }
     };
@@ -188,34 +189,34 @@ pub const Blend = struct {
 // ---------------------------------------------------------------------------
 
 // Scalar
-pub const Interp = InterpType(f32, Blend.scalar(f32));
-pub const Interpd = InterpType(f64, Blend.scalar(f64));
+pub const Interp = InterpType(f32, f32, Blend.scalar(f32));
+pub const Interpd = InterpType(f64, f64, Blend.scalar(f64));
 
 // Vector (f32)
-pub const Interp2 = InterpType(@Vector(2, f32), Blend.vector(2, f32));
-pub const Interp3 = InterpType(@Vector(3, f32), Blend.vector(3, f32));
-pub const Interp4 = InterpType(@Vector(4, f32), Blend.vector(4, f32));
+pub const Interp2 = InterpType(@Vector(2, f32), f32, Blend.vector(2, f32));
+pub const Interp3 = InterpType(@Vector(3, f32), f32, Blend.vector(3, f32));
+pub const Interp4 = InterpType(@Vector(4, f32), f32, Blend.vector(4, f32));
 
 // Vector (f64)
-pub const Interp2d = InterpType(@Vector(2, f64), Blend.vector(2, f64));
-pub const Interp3d = InterpType(@Vector(3, f64), Blend.vector(3, f64));
-pub const Interp4d = InterpType(@Vector(4, f64), Blend.vector(4, f64));
+pub const Interp2d = InterpType(@Vector(2, f64), f64, Blend.vector(2, f64));
+pub const Interp3d = InterpType(@Vector(3, f64), f64, Blend.vector(3, f64));
+pub const Interp4d = InterpType(@Vector(4, f64), f64, Blend.vector(4, f64));
 
 // Rotation (f32)
-pub const InterpRot2 = InterpType(linalg.Rotor2Type(f32), Blend.rotation(linalg.Rotor2Type(f32)));
-pub const InterpRot3 = InterpType(linalg.Rotor3Type(f32), Blend.rotation(linalg.Rotor3Type(f32)));
+pub const InterpRot2 = InterpType(linalg.Rotor2Type(f32), f32, Blend.rotation(linalg.Rotor2Type(f32)));
+pub const InterpRot3 = InterpType(linalg.Rotor3Type(f32), f32, Blend.rotation(linalg.Rotor3Type(f32)));
 
 // Rotation (f64)
-pub const InterpRot2d = InterpType(linalg.Rotor2Type(f64), Blend.rotation(linalg.Rotor2Type(f64)));
-pub const InterpRot3d = InterpType(linalg.Rotor3Type(f64), Blend.rotation(linalg.Rotor3Type(f64)));
+pub const InterpRot2d = InterpType(linalg.Rotor2Type(f64), f64, Blend.rotation(linalg.Rotor2Type(f64)));
+pub const InterpRot3d = InterpType(linalg.Rotor3Type(f64), f64, Blend.rotation(linalg.Rotor3Type(f64)));
 
 // Versor (f32) — interpolation within same parity (rotation or reflection)
-pub const InterpVersor2 = InterpType(linalg.Versor2Type(f32), Blend.rotation(linalg.Versor2Type(f32)));
-pub const InterpVersor3 = InterpType(linalg.Versor3Type(f32), Blend.rotation(linalg.Versor3Type(f32)));
+pub const InterpVersor2 = InterpType(linalg.Versor2Type(f32), f32, Blend.rotation(linalg.Versor2Type(f32)));
+pub const InterpVersor3 = InterpType(linalg.Versor3Type(f32), f32, Blend.rotation(linalg.Versor3Type(f32)));
 
 // Versor (f64)
-pub const InterpVersor2d = InterpType(linalg.Versor2Type(f64), Blend.rotation(linalg.Versor2Type(f64)));
-pub const InterpVersor3d = InterpType(linalg.Versor3Type(f64), Blend.rotation(linalg.Versor3Type(f64)));
+pub const InterpVersor2d = InterpType(linalg.Versor2Type(f64), f64, Blend.rotation(linalg.Versor2Type(f64)));
+pub const InterpVersor3d = InterpType(linalg.Versor3Type(f64), f64, Blend.rotation(linalg.Versor3Type(f64)));
 
 // ---------------------------------------------------------------------------
 // Easing functions

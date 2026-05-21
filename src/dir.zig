@@ -34,6 +34,8 @@ const Vec3i = linalg.VecType(3, i32);
 // Dir4
 // ---------------------------------------------------------------------------
 
+// TODO: Dir2
+
 /// 4 cardinal directions on a 2D grid.
 ///
 /// Axis convention: +X = east, +Y = north.
