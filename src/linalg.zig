@@ -734,31 +734,6 @@ pub fn MatType(comptime n: comptime_int, comptime Scalar: type) type {
     };
 }
 
-// TODO: Remove file wide declarations. Use non pub declarations within a struct/namespace
-const Vec2 = VecType(2, f32);
-const Vec3 = VecType(3, f32);
-const Vec4 = VecType(4, f32);
-
-const Vec2d = VecType(2, f64);
-const Vec3d = VecType(3, f64);
-const Vec4d = VecType(4, f64);
-
-const Vec2i = VecType(2, i32);
-const Vec3i = VecType(3, i32);
-const Vec4i = VecType(4, i32);
-
-const Vec2u = VecType(2, u32);
-const Vec3u = VecType(3, u32);
-const Vec4u = VecType(4, u32);
-
-const Mat2 = MatType(2, f32);
-const Mat3 = MatType(3, f32);
-const Mat4 = MatType(4, f32);
-
-const Mat2d = MatType(2, f64);
-const Mat3d = MatType(3, f64);
-const Mat4d = MatType(4, f64);
-
 /// 2D rotor (geometric algebra equivalent of a complex unit phasor).
 /// Represents a rotation as `cos(angle/2) + sin(angle/2) * e12`.
 /// Positive angle = counter-clockwise.
@@ -876,8 +851,10 @@ pub fn Rotor2Type(comptime Scalar: type) type {
                 d = -d;
                 to_adj = .{ .a = -to.a, .b = -to.b };
             }
-            // TODO: Use a more exact value here
-            if (d > 0.9995) {
+            // Fall back to nlerp when rotors are nearly parallel: acos precision degrades near d=1,
+            // and nlerp error is within float epsilon below sqrt(eps) radians (~0.06° for f32).
+            const nlerp_cutoff: Scalar = 1.0 - math.sqrt(math.floatEps(Scalar));
+            if (d > nlerp_cutoff) {
                 return nlerp(from, to_adj, t);
             }
             const theta = math.acos(d);
@@ -1137,9 +1114,8 @@ pub fn Rotor3Type(comptime Scalar: type) type {
 /// with arguments swapped (`b · a`) because the vector sandwich has the
 /// opposite composition order from the bivector sandwich used by Rot2.
 ///
-/// See `.pi/journals/2026-03-03-versor-clifford-algebra-verification.md`
-/// for the full derivation and computational verification of all formulas.
-/// TODO: Extract contents of `.pi/journals/2026-03-03-versor-clifford-algebra-verification.md` to local reference
+/// See `docs/versor-derivation.md` for the full derivation and computational
+/// verification of all formulas.
 pub fn Versor2Type(comptime Scalar: type) type {
     const Vec2S = VecType(2, Scalar);
     const Mat2S = MatType(2, Scalar);
@@ -1409,8 +1385,8 @@ pub fn Versor2Type(comptime Scalar: type) type {
 /// The e₁₃ component is NEGATED relative to the Rot3 convention due to the
 /// Hodge dual: ⋆e₂ = −e₁₃. Conversions via `fromRotor`/`toRotor` handle this.
 ///
-/// See `.pi/journals/2026-03-03-versor-clifford-algebra-verification.md`
-/// for the full derivation and computational verification of all formulas.
+/// See `docs/versor-derivation.md` for the full derivation and computational
+/// verification of all formulas.
 pub fn Versor3Type(comptime Scalar: type) type {
     const Vec3S = VecType(3, Scalar);
     const Mat3S = MatType(3, Scalar);
@@ -1888,6 +1864,34 @@ pub fn TransformType(comptime Scalar: type) type {
         }
     };
 }
+
+// ---------------------------------------------------------------------------
+// Test-only type aliases — concrete instantiations for the tests below
+// ---------------------------------------------------------------------------
+
+const Vec2 = VecType(2, f32);
+const Vec3 = VecType(3, f32);
+const Vec4 = VecType(4, f32);
+
+const Vec2d = VecType(2, f64);
+const Vec3d = VecType(3, f64);
+const Vec4d = VecType(4, f64);
+
+const Vec2i = VecType(2, i32);
+const Vec3i = VecType(3, i32);
+const Vec4i = VecType(4, i32);
+
+const Vec2u = VecType(2, u32);
+const Vec3u = VecType(3, u32);
+const Vec4u = VecType(4, u32);
+
+const Mat2 = MatType(2, f32);
+const Mat3 = MatType(3, f32);
+const Mat4 = MatType(4, f32);
+
+const Mat2d = MatType(2, f64);
+const Mat3d = MatType(3, f64);
+const Mat4d = MatType(4, f64);
 
 const Rot2 = Rotor2Type(f32);
 const Rot3 = Rotor3Type(f32);
