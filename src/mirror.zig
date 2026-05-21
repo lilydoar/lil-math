@@ -86,7 +86,7 @@ pub fn MirrorType(comptime n: comptime_int, comptime Scalar: type) type {
 
 const std = @import("std");
 const math = std.math;
-const approx = linalg.Approx(.normal);
+const eps_normal: f32 = @sqrt(math.floatEps(f32));
 const Vec2 = linalg.VecType(2, f32);
 const Vec3 = linalg.VecType(3, f32);
 const Mirror2 = MirrorType(2, f32);
@@ -95,19 +95,19 @@ const Mirror3 = MirrorType(3, f32);
 test "Mirror3: acrossYZ reflects X" {
     const m = Mirror3.acrossYZ;
     const result = m.applyPoint(Vec3.init(.{ 3, 4, 5 }));
-    try std.testing.expect(approx.eql(result, Vec3.init(.{ -3, 4, 5 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ -3, 4, 5 }), eps_normal));
 }
 
 test "Mirror3: acrossXZ reflects Y" {
     const m = Mirror3.acrossXZ;
     const result = m.applyPoint(Vec3.init(.{ 3, 4, 5 }));
-    try std.testing.expect(approx.eql(result, Vec3.init(.{ 3, -4, 5 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ 3, -4, 5 }), eps_normal));
 }
 
 test "Mirror3: acrossXY reflects Z" {
     const m = Mirror3.acrossXY;
     const result = m.applyPoint(Vec3.init(.{ 3, 4, 5 }));
-    try std.testing.expect(approx.eql(result, Vec3.init(.{ 3, 4, -5 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ 3, 4, -5 }), eps_normal));
 }
 
 test "Mirror3: offset origin" {
@@ -115,20 +115,20 @@ test "Mirror3: offset origin" {
     const m = Mirror3.fromPlane(Vec3.init(.{ 0, 1, 0 }), Vec3.init(.{ 0, 5, 0 }));
     const result = m.applyPoint(Vec3.init(.{ 1, 3, 0 }));
     // 3 is 2 below Y=5, so reflected to Y=7
-    try std.testing.expect(approx.eql(result, Vec3.init(.{ 1, 7, 0 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ 1, 7, 0 }), eps_normal));
 }
 
 test "Mirror3: applyDir ignores origin" {
     const m = Mirror3.fromPlane(Vec3.init(.{ 1, 0, 0 }), Vec3.init(.{ 100, 0, 0 }));
     const result = m.applyDir(Vec3.init(.{ 1, 0, 0 }));
-    try std.testing.expect(approx.eql(result, Vec3.init(.{ -1, 0, 0 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ -1, 0, 0 }), eps_normal));
 }
 
 test "Mirror3: double reflection is identity" {
     const m = Mirror3.fromNormal(Vec3.init(.{ 0, 0, 1 }));
     const v = Vec3.init(.{ 3, 4, 5 });
     const result = m.applyPoint(m.applyPoint(v));
-    try std.testing.expect(approx.eql(result, v));
+    try std.testing.expect(result.eql(v, eps_normal));
 }
 
 test "Mirror3: toVersor matches applyDir" {
@@ -136,7 +136,7 @@ test "Mirror3: toVersor matches applyDir" {
     const m = Mirror3.fromNormal(Vec3.init(.{ s2, s2, 0 }));
     const versor = m.toVersor();
     const v = Vec3.init(.{ 1, 0, 0 });
-    try std.testing.expect(approx.eql(m.applyDir(v), versor.apply(v)));
+    try std.testing.expect(m.applyDir(v).eql(versor.apply(v), eps_normal));
 }
 
 test "Mirror3: preserves length" {
@@ -144,26 +144,26 @@ test "Mirror3: preserves length" {
     const m = Mirror3.fromNormal(Vec3.init(.{ s3, s3, s3 }));
     const v = Vec3.init(.{ 3, 4, 5 });
     const reflected = m.applyDir(v);
-    try std.testing.expect(approx.eql(v.len(), reflected.len()));
+    try std.testing.expect(@abs(v.len() - reflected.len()) <= eps_normal);
 }
 
 test "Mirror2: acrossY reflects X" {
     const m = Mirror2.acrossY;
     const result = m.applyPoint(Vec2.init(.{ 3, 4 }));
-    try std.testing.expect(approx.eql(result, Vec2.init(.{ -3, 4 })));
+    try std.testing.expect(result.eql(Vec2.init(.{ -3, 4 }), eps_normal));
 }
 
 test "Mirror2: acrossX reflects Y" {
     const m = Mirror2.acrossX;
     const result = m.applyPoint(Vec2.init(.{ 3, 4 }));
-    try std.testing.expect(approx.eql(result, Vec2.init(.{ 3, -4 })));
+    try std.testing.expect(result.eql(Vec2.init(.{ 3, -4 }), eps_normal));
 }
 
 test "Mirror2: offset origin" {
     const m = Mirror2.fromPlane(Vec2.init(.{ 1, 0 }), Vec2.init(.{ 5, 0 }));
     const result = m.applyPoint(Vec2.init(.{ 3, 7 }));
     // 3 is 2 left of X=5, reflected to X=7
-    try std.testing.expect(approx.eql(result, Vec2.init(.{ 7, 7 })));
+    try std.testing.expect(result.eql(Vec2.init(.{ 7, 7 }), eps_normal));
 }
 
 test "Mirror2: toVersor matches applyDir" {
@@ -171,5 +171,5 @@ test "Mirror2: toVersor matches applyDir" {
     const m = Mirror2.fromNormal(Vec2.init(.{ s2, s2 }));
     const versor = m.toVersor();
     const v = Vec2.init(.{ 1, 0 });
-    try std.testing.expect(approx.eql(m.applyDir(v), versor.apply(v)));
+    try std.testing.expect(m.applyDir(v).eql(versor.apply(v), eps_normal));
 }

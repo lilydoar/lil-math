@@ -14,7 +14,6 @@ const Vec3 = root.Vec3;
 const Vec4 = root.Vec4;
 const Mat4 = root.Mat4;
 const Rot3 = root.Rot3;
-const Approx = root.Approx;
 
 /// A spatial transform: translation, rotation, and scale.
 /// Composes to a Mat4 as T * R * S (scale applied first, then rotation, then translation).
@@ -53,7 +52,7 @@ pub const Transform = struct {
 
 // Tests
 
-const approx = Approx(.normal);
+const eps_normal: f32 = @sqrt(std.math.floatEps(f32));
 
 test "identity transform produces identity matrix" {
     const t = Transform.identity;
@@ -70,7 +69,7 @@ test "translation-only transform" {
     const t = Transform.fromTranslation(Vec3.init(.{ 3, 4, 5 }));
     const m = t.toMat4();
     const expected = Mat4.translation(Vec3.init(.{ 3, 4, 5 }));
-    try std.testing.expect(approx.eql(m, expected));
+    try std.testing.expect(m.eql(expected, eps_normal));
 }
 
 test "rotation-only transform" {
@@ -80,7 +79,7 @@ test "rotation-only transform" {
     const t = Transform.fromRotation(rot);
     const m = t.toMat4();
     const expected = rot.toMat4();
-    try std.testing.expect(approx.eql(m, expected));
+    try std.testing.expect(m.eql(expected, eps_normal));
 }
 
 test "combined TRS applies scale then rotation then translation" {

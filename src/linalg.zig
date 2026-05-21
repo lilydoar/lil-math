@@ -69,22 +69,18 @@ pub fn VecType(comptime n: comptime_int, comptime Scalar: type) type {
             return .{ .v = -a.v };
         }
 
-        /// Returns true if all components are exactly equal.
-        /// Equivalent to `eqlApprox` with `.tight` tolerance.
-        pub inline fn eql(a: Self, b: Self) bool {
-            return eqlApprox(a, b, .tight);
-        }
-
-        /// Returns true if every component of `a` and `b` differs by at most
-        /// the epsilon for `tol`.
-        pub inline fn eqlApprox(a: Self, b: Self, comptime tol: Tolerance) bool {
-            if (is_float) {
-                const diff = a.v - b.v;
-                const eps: @Vector(n, Scalar) = @splat(tol.epsilon(Scalar));
-                return @reduce(.And, diff < eps) and @reduce(.And, diff > -eps);
+        /// For float scalars: returns true if all components differ by at most `e`.
+        /// For integer scalars: exact equality (no `e` parameter).
+        pub const eql = if (is_float) struct {
+            pub fn f(a: Self, b: Self, e: Scalar) bool {
+                const eps: @Vector(n, Scalar) = @splat(e);
+                return @reduce(.And, @abs(a.v - b.v) <= eps);
             }
-            return @reduce(.And, a.v == b.v);
-        }
+        }.f else struct {
+            pub fn f(a: Self, b: Self) bool {
+                return @reduce(.And, a.v == b.v);
+            }
+        }.f;
 
         /// Component-wise absolute value.
         pub inline fn abs(a: Self) Self {
@@ -358,27 +354,24 @@ pub fn MatType(comptime n: comptime_int, comptime Scalar: type) type {
             return .{ .m = result };
         }
 
-        /// Returns true if all elements are exactly equal.
-        pub inline fn eql(a: Self, b: Self) bool {
-            return eqlApprox(a, b, .tight);
-        }
-
-        /// Returns true if every element of `a` and `b` differs by at most
-        /// the epsilon for `tol`.
-        pub inline fn eqlApprox(a: Self, b: Self, comptime tol: Tolerance) bool {
-            if (is_float) {
-                const eps: ColVec = @splat(tol.epsilon(Scalar));
+        /// For float scalars: returns true if all elements differ by at most `e`.
+        /// For integer scalars: exact equality (no `e` parameter).
+        pub const eql = if (is_float) struct {
+            pub fn f(a: Self, b: Self, e: Scalar) bool {
+                const eps: ColVec = @splat(e);
                 inline for (0..n) |c| {
-                    const diff = a.m[c] - b.m[c];
-                    if (!(@reduce(.And, diff < eps) and @reduce(.And, diff > -eps))) return false;
+                    if (!@reduce(.And, @abs(a.m[c] - b.m[c]) <= eps)) return false;
                 }
                 return true;
             }
-            inline for (0..n) |c| {
-                if (!@reduce(.And, a.m[c] == b.m[c])) return false;
+        }.f else struct {
+            pub fn f(a: Self, b: Self) bool {
+                inline for (0..n) |c| {
+                    if (!@reduce(.And, a.m[c] == b.m[c])) return false;
+                }
+                return true;
             }
-            return true;
-        }
+        }.f;
 
         /// Returns the sum of the diagonal elements.
         pub inline fn trace(self: Self) Scalar {
@@ -1783,27 +1776,27 @@ const Versor3 = Versor3Type(f32);
 const Versor2d = Versor2Type(f64);
 const Versor3d = Versor3Type(f64);
 
-const approx_normal = Approx(.normal);
-const approx_loose = Approx(.loose);
+const eps_normal: f32 = @sqrt(math.floatEps(f32));
+const eps_loose: f32 = 1e-3;
 
 test "Vec2: arithmetic" {
     const a = Vec2.init(.{ 1, 2 });
     const b = Vec2.init(.{ 3, 4 });
 
-    try std.testing.expect(a.add(b).eql(Vec2.init(.{ 4, 6 })));
-    try std.testing.expect(a.sub(b).eql(Vec2.init(.{ -2, -2 })));
-    try std.testing.expect(a.mul(b).eql(Vec2.init(.{ 3, 8 })));
-    try std.testing.expect(a.scale(2).eql(Vec2.init(.{ 2, 4 })));
-    try std.testing.expect(a.neg().eql(Vec2.init(.{ -1, -2 })));
+    try std.testing.expect(a.add(b).eql(Vec2.init(.{ 4, 6 }), 0));
+    try std.testing.expect(a.sub(b).eql(Vec2.init(.{ -2, -2 }), 0));
+    try std.testing.expect(a.mul(b).eql(Vec2.init(.{ 3, 8 }), 0));
+    try std.testing.expect(a.scale(2).eql(Vec2.init(.{ 2, 4 }), 0));
+    try std.testing.expect(a.neg().eql(Vec2.init(.{ -1, -2 }), 0));
 }
 
 test "Vec3: arithmetic" {
     const a = Vec3.init(.{ 1, 2, 3 });
     const b = Vec3.init(.{ 4, 5, 6 });
 
-    try std.testing.expect(a.add(b).eql(Vec3.init(.{ 5, 7, 9 })));
-    try std.testing.expect(a.sub(b).eql(Vec3.init(.{ -3, -3, -3 })));
-    try std.testing.expect(a.scale(-1).eql(a.neg()));
+    try std.testing.expect(a.add(b).eql(Vec3.init(.{ 5, 7, 9 }), 0));
+    try std.testing.expect(a.sub(b).eql(Vec3.init(.{ -3, -3, -3 }), 0));
+    try std.testing.expect(a.scale(-1).eql(a.neg(), 0));
 }
 
 test "Vec: dot product" {
@@ -1834,27 +1827,27 @@ test "Vec: lerp" {
     const a = Vec3.init(.{ 0, 0, 0 });
     const b = Vec3.init(.{ 10, 20, 30 });
 
-    try std.testing.expect(a.lerp(b, 0).eql(a));
-    try std.testing.expect(a.lerp(b, 1).eql(b));
-    try std.testing.expect(a.lerp(b, 0.5).eql(Vec3.init(.{ 5, 10, 15 })));
+    try std.testing.expect(a.lerp(b, 0).eql(a, 0));
+    try std.testing.expect(a.lerp(b, 1).eql(b, 0));
+    try std.testing.expect(a.lerp(b, 0.5).eql(Vec3.init(.{ 5, 10, 15 }), 0));
 }
 
 test "Vec: project" {
     const v = Vec2.init(.{ 3, 4 });
     const onto = Vec2.init(.{ 1, 0 });
     const proj = v.project(onto);
-    try std.testing.expect(proj.eql(Vec2.init(.{ 3, 0 })));
+    try std.testing.expect(proj.eql(Vec2.init(.{ 3, 0 }), 0));
 }
 
 test "Vec: per-component operations" {
     const v = Vec3.init(.{ -3, 0, 5 });
-    try std.testing.expect(v.abs().eql(Vec3.init(.{ 3, 0, 5 })));
-    try std.testing.expect(v.sign().eql(Vec3.init(.{ -1, 0, 1 })));
+    try std.testing.expect(v.abs().eql(Vec3.init(.{ 3, 0, 5 }), 0));
+    try std.testing.expect(v.sign().eql(Vec3.init(.{ -1, 0, 1 }), 0));
 
     const a = Vec3.init(.{ 1, 5, 3 });
     const b = Vec3.init(.{ 4, 2, 6 });
-    try std.testing.expect(a.min(b).eql(Vec3.init(.{ 1, 2, 3 })));
-    try std.testing.expect(a.max(b).eql(Vec3.init(.{ 4, 5, 6 })));
+    try std.testing.expect(a.min(b).eql(Vec3.init(.{ 1, 2, 3 }), 0));
+    try std.testing.expect(a.max(b).eql(Vec3.init(.{ 4, 5, 6 }), 0));
 }
 
 test "Vec: reductions" {
@@ -1865,14 +1858,14 @@ test "Vec: reductions" {
 
 test "Vec: floor, ceil, round" {
     const v = Vec2.init(.{ 1.3, -2.7 });
-    try std.testing.expect(v.floor().eql(Vec2.init(.{ 1, -3 })));
-    try std.testing.expect(v.ceil().eql(Vec2.init(.{ 2, -2 })));
-    try std.testing.expect(v.round().eql(Vec2.init(.{ 1, -3 })));
+    try std.testing.expect(v.floor().eql(Vec2.init(.{ 1, -3 }), 0));
+    try std.testing.expect(v.ceil().eql(Vec2.init(.{ 2, -2 }), 0));
+    try std.testing.expect(v.round().eql(Vec2.init(.{ 1, -3 }), 0));
 }
 
 test "Vec2: perp and angle" {
     const v = Vec2.init(.{ 1, 0 });
-    try std.testing.expect(v.perp().eql(Vec2.init(.{ 0, 1 })));
+    try std.testing.expect(v.perp().eql(Vec2.init(.{ 0, 1 }), 0));
     try std.testing.expectEqual(@as(f32, 0), v.angle());
 
     const eps = @sqrt(math.floatEps(f32));
@@ -1892,12 +1885,12 @@ test "Vec3: 3D cross product" {
     const y = Vec3.init(.{ 0, 1, 0 });
     const z = Vec3.init(.{ 0, 0, 1 });
 
-    try std.testing.expect(x.cross(y).eql(z));
-    try std.testing.expect(y.cross(z).eql(x));
-    try std.testing.expect(z.cross(x).eql(y));
+    try std.testing.expect(x.cross(y).eql(z, 0));
+    try std.testing.expect(y.cross(z).eql(x, 0));
+    try std.testing.expect(z.cross(x).eql(y, 0));
 
     // Anti-commutativity
-    try std.testing.expect(y.cross(x).eql(z.neg()));
+    try std.testing.expect(y.cross(x).eql(z.neg(), 0));
 }
 
 test "Vec: integer operations" {
@@ -1910,16 +1903,16 @@ test "Vec: integer operations" {
 }
 
 test "Vec: constants" {
-    try std.testing.expect(Vec3.zero.eql(Vec3.init(.{ 0, 0, 0 })));
-    try std.testing.expect(Vec3.one.eql(Vec3.init(.{ 1, 1, 1 })));
-    try std.testing.expect(Vec3.splat(7).eql(Vec3.init(.{ 7, 7, 7 })));
+    try std.testing.expect(Vec3.zero.eql(Vec3.init(.{ 0, 0, 0 }), 0));
+    try std.testing.expect(Vec3.one.eql(Vec3.init(.{ 1, 1, 1 }), 0));
+    try std.testing.expect(Vec3.splat(7).eql(Vec3.init(.{ 7, 7, 7 }), 0));
 }
 
 test "Mat: identity" {
     const I = Mat3.identity;
     const v = Vec3.init(.{ 2, 3, 4 });
-    try std.testing.expect(I.mulVec(v).eql(v));
-    try std.testing.expect(I.mul(I).eql(I));
+    try std.testing.expect(I.mulVec(v).eql(v, 0));
+    try std.testing.expect(I.mul(I).eql(I, 0));
 }
 
 test "Mat: fromCols, col, row" {
@@ -1927,10 +1920,10 @@ test "Mat: fromCols, col, row" {
     const c1 = Vec2.init(.{ 3, 4 });
     const m = Mat2.fromCols(.{ c0, c1 });
 
-    try std.testing.expect(m.col(0).eql(c0));
-    try std.testing.expect(m.col(1).eql(c1));
-    try std.testing.expect(m.row(0).eql(Vec2.init(.{ 1, 3 })));
-    try std.testing.expect(m.row(1).eql(Vec2.init(.{ 2, 4 })));
+    try std.testing.expect(m.col(0).eql(c0, 0));
+    try std.testing.expect(m.col(1).eql(c1, 0));
+    try std.testing.expect(m.row(0).eql(Vec2.init(.{ 1, 3 }), 0));
+    try std.testing.expect(m.row(1).eql(Vec2.init(.{ 2, 4 }), 0));
 }
 
 test "Mat: arithmetic" {
@@ -1944,17 +1937,17 @@ test "Mat: arithmetic" {
     });
 
     const sum = a.add(b);
-    try std.testing.expect(sum.col(0).eql(Vec2.init(.{ 6, 8 })));
-    try std.testing.expect(sum.col(1).eql(Vec2.init(.{ 10, 12 })));
+    try std.testing.expect(sum.col(0).eql(Vec2.init(.{ 6, 8 }), 0));
+    try std.testing.expect(sum.col(1).eql(Vec2.init(.{ 10, 12 }), 0));
 
     const diff = a.sub(b);
-    try std.testing.expect(diff.col(0).eql(Vec2.init(.{ -4, -4 })));
-    try std.testing.expect(diff.col(1).eql(Vec2.init(.{ -4, -4 })));
+    try std.testing.expect(diff.col(0).eql(Vec2.init(.{ -4, -4 }), 0));
+    try std.testing.expect(diff.col(1).eql(Vec2.init(.{ -4, -4 }), 0));
 
     const scaled = a.scale(2);
-    try std.testing.expect(scaled.col(0).eql(Vec2.init(.{ 2, 4 })));
+    try std.testing.expect(scaled.col(0).eql(Vec2.init(.{ 2, 4 }), 0));
 
-    try std.testing.expect(a.neg().add(a).eql(Mat2.zero));
+    try std.testing.expect(a.neg().add(a).eql(Mat2.zero, 0));
 }
 
 test "Mat2: multiply" {
@@ -1972,8 +1965,8 @@ test "Mat2: multiply" {
     // AB: col0 = A * b_col0 = [1*5+3*6, 2*5+4*6] = [23, 34]
     //     col1 = A * b_col1 = [1*7+3*8, 2*7+4*8] = [31, 46]
     const ab = a.mul(b);
-    try std.testing.expect(ab.col(0).eql(Vec2.init(.{ 23, 34 })));
-    try std.testing.expect(ab.col(1).eql(Vec2.init(.{ 31, 46 })));
+    try std.testing.expect(ab.col(0).eql(Vec2.init(.{ 23, 34 }), 0));
+    try std.testing.expect(ab.col(1).eql(Vec2.init(.{ 31, 46 }), 0));
 }
 
 test "Mat: mulVec" {
@@ -1983,7 +1976,7 @@ test "Mat: mulVec" {
         Vec3.init(.{ 0, 0, 1 }),
     });
     const v = Vec3.init(.{ 2, 3, 4 });
-    try std.testing.expect(m.mulVec(v).eql(v));
+    try std.testing.expect(m.mulVec(v).eql(v, 0));
 
     // Scale x by 2
     const s = Mat3.fromCols(.{
@@ -1991,7 +1984,7 @@ test "Mat: mulVec" {
         Vec3.init(.{ 0, 1, 0 }),
         Vec3.init(.{ 0, 0, 1 }),
     });
-    try std.testing.expect(s.mulVec(v).eql(Vec3.init(.{ 4, 3, 4 })));
+    try std.testing.expect(s.mulVec(v).eql(Vec3.init(.{ 4, 3, 4 }), 0));
 }
 
 test "Mat: transpose" {
@@ -2000,16 +1993,16 @@ test "Mat: transpose" {
         Vec2.init(.{ 3, 4 }),
     });
     const mt = m.transpose();
-    try std.testing.expect(mt.col(0).eql(Vec2.init(.{ 1, 3 })));
-    try std.testing.expect(mt.col(1).eql(Vec2.init(.{ 2, 4 })));
+    try std.testing.expect(mt.col(0).eql(Vec2.init(.{ 1, 3 }), 0));
+    try std.testing.expect(mt.col(1).eql(Vec2.init(.{ 2, 4 }), 0));
 
     // Double transpose = original
-    try std.testing.expect(mt.transpose().eql(m));
+    try std.testing.expect(mt.transpose().eql(m, 0));
 }
 
 test "Mat: transpose of identity is identity" {
-    try std.testing.expect(Mat3.identity.transpose().eql(Mat3.identity));
-    try std.testing.expect(Mat4.identity.transpose().eql(Mat4.identity));
+    try std.testing.expect(Mat3.identity.transpose().eql(Mat3.identity, 0));
+    try std.testing.expect(Mat4.identity.transpose().eql(Mat4.identity, 0));
 }
 
 test "Mat: trace" {
@@ -2066,8 +2059,8 @@ test "Mat2: inverse" {
     });
     const inv = m.inverse();
     // M * M^-1 = I
-    if (!approx_normal.eql(m.mul(inv), Mat2.identity)) return error.TestUnexpectedResult;
-    if (!approx_normal.eql(inv.mul(m), Mat2.identity)) return error.TestUnexpectedResult;
+    if (!m.mul(inv).eql(Mat2.identity, eps_normal)) return error.TestUnexpectedResult;
+    if (!inv.mul(m).eql(Mat2.identity, eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Mat3: inverse" {
@@ -2077,32 +2070,32 @@ test "Mat3: inverse" {
         Vec3.init(.{ 3, 6, 10 }),
     });
     const inv = m.inverse();
-    if (!approx_normal.eql(m.mul(inv), Mat3.identity)) return error.TestUnexpectedResult;
-    if (!approx_normal.eql(inv.mul(m), Mat3.identity)) return error.TestUnexpectedResult;
+    if (!m.mul(inv).eql(Mat3.identity, eps_normal)) return error.TestUnexpectedResult;
+    if (!inv.mul(m).eql(Mat3.identity, eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Mat4: inverse" {
     // Translation inverse
     const t = Mat4.translation(Vec3.init(.{ 3, 4, 5 }));
     const t_inv = t.inverse();
-    if (!approx_normal.eql(t.mul(t_inv), Mat4.identity)) return error.TestUnexpectedResult;
+    if (!t.mul(t_inv).eql(Mat4.identity, eps_normal)) return error.TestUnexpectedResult;
 
     // Rotation inverse
     const pi = math.pi;
     const r = Mat4.rotation(Vec3.init(.{ 1, 1, 1 }).normalize(), pi / 3.0);
     const r_inv = r.inverse();
-    if (!approx_normal.eql(r.mul(r_inv), Mat4.identity)) return error.TestUnexpectedResult;
+    if (!r.mul(r_inv).eql(Mat4.identity, eps_normal)) return error.TestUnexpectedResult;
 
     // Combined transform
     const m = t.mul(r).mul(Mat4.scaling(Vec3.init(.{ 2, 3, 4 })));
     const m_inv = m.inverse();
-    if (!approx_normal.eql(m.mul(m_inv), Mat4.identity)) return error.TestUnexpectedResult;
-    if (!approx_normal.eql(m_inv.mul(m), Mat4.identity)) return error.TestUnexpectedResult;
+    if (!m.mul(m_inv).eql(Mat4.identity, eps_normal)) return error.TestUnexpectedResult;
+    if (!m_inv.mul(m).eql(Mat4.identity, eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Mat4: identity mulVec" {
     const v = Vec4.init(.{ 1, 2, 3, 4 });
-    try std.testing.expect(Mat4.identity.mulVec(v).eql(v));
+    try std.testing.expect(Mat4.identity.mulVec(v).eql(v, 0));
 }
 
 test "Mat: mul associativity" {
@@ -2120,7 +2113,7 @@ test "Mat: mul associativity" {
     });
 
     // (A*B)*C == A*(B*C)
-    try std.testing.expect(a.mul(b).mul(c).eql(a.mul(b.mul(c))));
+    try std.testing.expect(a.mul(b).mul(c).eql(a.mul(b.mul(c)), 0));
 }
 
 test "Rotor2: fromAngle + rotate" {
@@ -2130,16 +2123,16 @@ test "Rotor2: fromAngle + rotate" {
 
     // 90° CCW: e1 → e2
     const r90 = Rot2.fromAngle(pi / 2.0);
-    if (!approx_normal.eql(r90.rotate(e1), e2)) return error.TestUnexpectedResult;
+    if (!r90.rotate(e1).eql(e2, eps_normal)) return error.TestUnexpectedResult;
 
     // 180°: e1 → -e1
     const r180 = Rot2.fromAngle(pi);
-    if (!approx_normal.eql(r180.rotate(e1), Vec2.init(.{ -1, 0 }))) return error.TestUnexpectedResult;
+    if (!r180.rotate(e1).eql(Vec2.init(.{ -1, 0 }), eps_normal)) return error.TestUnexpectedResult;
 
     // 45°
     const r45 = Rot2.fromAngle(pi / 4.0);
     const s = @sqrt(2.0) / 2.0;
-    if (!approx_normal.eql(r45.rotate(e1), Vec2.init(.{ s, s }))) return error.TestUnexpectedResult;
+    if (!r45.rotate(e1).eql(Vec2.init(.{ s, s }), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor2: fromVecs" {
@@ -2148,15 +2141,15 @@ test "Rotor2: fromVecs" {
 
     // from e1 to e2 (90° CCW)
     const r = Rot2.fromVecs(e1, e2);
-    if (!approx_normal.eql(r.rotate(e1), e2)) return error.TestUnexpectedResult;
+    if (!r.rotate(e1).eql(e2, eps_normal)) return error.TestUnexpectedResult;
 
     // from e2 to e1 (90° CW)
     const r2 = Rot2.fromVecs(e2, e1);
-    if (!approx_normal.eql(r2.rotate(e2), e1)) return error.TestUnexpectedResult;
+    if (!r2.rotate(e2).eql(e1, eps_normal)) return error.TestUnexpectedResult;
 
     // 180° edge case
     const r180 = Rot2.fromVecs(e1, Vec2.init(.{ -1, 0 }));
-    if (!approx_normal.eql(r180.rotate(e1), Vec2.init(.{ -1, 0 }))) return error.TestUnexpectedResult;
+    if (!r180.rotate(e1).eql(Vec2.init(.{ -1, 0 }), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor2: mul composes rotations" {
@@ -2166,7 +2159,7 @@ test "Rotor2: mul composes rotations" {
     // Two 45° rotations = one 90°
     const r45 = Rot2.fromAngle(pi / 4.0);
     const r90 = r45.mul(r45);
-    if (!approx_normal.eql(r90.rotate(e1), Vec2.init(.{ 0, 1 }))) return error.TestUnexpectedResult;
+    if (!r90.rotate(e1).eql(Vec2.init(.{ 0, 1 }), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor2: reverse undoes rotation" {
@@ -2175,7 +2168,7 @@ test "Rotor2: reverse undoes rotation" {
     const r = Rot2.fromAngle(pi / 3.0);
     const rotated = r.rotate(v);
     const back = r.reverse().rotate(rotated);
-    if (!approx_normal.eql(back, v)) return error.TestUnexpectedResult;
+    if (!back.eql(v, eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor2: angle roundtrip" {
@@ -2192,7 +2185,7 @@ test "Rotor2: toMat2 matches rotate" {
     const r = Rot2.fromAngle(pi / 3.0);
     const m = r.toMat2();
     const v = Vec2.init(.{ 2, -1 });
-    if (!approx_normal.eql(m.mulVec(v), r.rotate(v))) return error.TestUnexpectedResult;
+    if (!m.mulVec(v).eql(r.rotate(v), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor2: slerp endpoints" {
@@ -2201,10 +2194,10 @@ test "Rotor2: slerp endpoints" {
     const r1 = Rot2.fromAngle(pi / 2.0);
 
     const s0 = Rot2.slerp(r0, r1, 0);
-    if (!approx_normal.eql(s0, r0)) return error.TestUnexpectedResult;
+    if (!(@abs(s0.a - r0.a) <= eps_normal and @abs(s0.b - r0.b) <= eps_normal)) return error.TestUnexpectedResult;
 
     const s1 = Rot2.slerp(r0, r1, 1);
-    if (!approx_normal.eql(s1, r1)) return error.TestUnexpectedResult;
+    if (!(@abs(s1.a - r1.a) <= eps_normal and @abs(s1.b - r1.b) <= eps_normal)) return error.TestUnexpectedResult;
 
     // Midpoint should be 45°
     const smid = Rot2.slerp(r0, r1, 0.5);
@@ -2219,15 +2212,15 @@ test "Rotor3: fromAxisAngle + rotate" {
 
     // 90° around z: e1 → e2
     const rz = Rot3.fromAxisAngle(pi / 2.0, e3);
-    if (!approx_normal.eql(rz.rotate(e1), e2)) return error.TestUnexpectedResult;
+    if (!rz.rotate(e1).eql(e2, eps_normal)) return error.TestUnexpectedResult;
 
     // 90° around y: e1 → -e3
     const ry = Rot3.fromAxisAngle(pi / 2.0, e2);
-    if (!approx_normal.eql(ry.rotate(e1), Vec3.init(.{ 0, 0, -1 }))) return error.TestUnexpectedResult;
+    if (!ry.rotate(e1).eql(Vec3.init(.{ 0, 0, -1 }), eps_normal)) return error.TestUnexpectedResult;
 
     // 90° around x: e2 → e3
     const rx = Rot3.fromAxisAngle(pi / 2.0, e1);
-    if (!approx_normal.eql(rx.rotate(e2), e3)) return error.TestUnexpectedResult;
+    if (!rx.rotate(e2).eql(e3, eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor3: fromVecs" {
@@ -2237,15 +2230,15 @@ test "Rotor3: fromVecs" {
 
     // e1 → e2
     const r = Rot3.fromVecs(e1, e2);
-    if (!approx_normal.eql(r.rotate(e1), e2)) return error.TestUnexpectedResult;
+    if (!r.rotate(e1).eql(e2, eps_normal)) return error.TestUnexpectedResult;
 
     // e1 → e3
     const r2 = Rot3.fromVecs(e1, e3);
-    if (!approx_normal.eql(r2.rotate(e1), e3)) return error.TestUnexpectedResult;
+    if (!r2.rotate(e1).eql(e3, eps_normal)) return error.TestUnexpectedResult;
 
     // 180° edge case: e1 → -e1
     const r180 = Rot3.fromVecs(e1, Vec3.init(.{ -1, 0, 0 }));
-    if (!approx_normal.eql(r180.rotate(e1), Vec3.init(.{ -1, 0, 0 }))) return error.TestUnexpectedResult;
+    if (!r180.rotate(e1).eql(Vec3.init(.{ -1, 0, 0 }), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor3: mul composes rotations" {
@@ -2256,7 +2249,7 @@ test "Rotor3: mul composes rotations" {
     // Two 45° around z = one 90° around z
     const r45 = Rot3.fromAxisAngle(pi / 4.0, e3);
     const r90 = r45.mul(r45);
-    if (!approx_normal.eql(r90.rotate(e1), Vec3.init(.{ 0, 1, 0 }))) return error.TestUnexpectedResult;
+    if (!r90.rotate(e1).eql(Vec3.init(.{ 0, 1, 0 }), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor3: reverse undoes rotation" {
@@ -2264,7 +2257,7 @@ test "Rotor3: reverse undoes rotation" {
     const v = Vec3.init(.{ 1, 2, 3 });
     const r = Rot3.fromAxisAngle(pi / 5.0, Vec3.init(.{ 1, 1, 1 }).normalize());
     const back = r.reverse().rotate(r.rotate(v));
-    if (!approx_normal.eql(back, v)) return error.TestUnexpectedResult;
+    if (!back.eql(v, eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor3: toMat3 matches rotate" {
@@ -2272,7 +2265,7 @@ test "Rotor3: toMat3 matches rotate" {
     const r = Rot3.fromAxisAngle(pi / 3.0, Vec3.init(.{ 0, 1, 1 }).normalize());
     const m = r.toMat3();
     const v = Vec3.init(.{ 2, -1, 3 });
-    if (!approx_normal.eql(m.mulVec(v), r.rotate(v))) return error.TestUnexpectedResult;
+    if (!m.mulVec(v).eql(r.rotate(v), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor3: toMat4 matches rotate" {
@@ -2296,85 +2289,85 @@ test "Rotor3: slerp endpoints and midpoint" {
 
     // t=0 → r0
     const s0 = Rot3.slerp(r0, r1, 0);
-    if (!approx_normal.eql(s0, r0)) return error.TestUnexpectedResult;
+    if (!(@abs(s0.a - r0.a) <= eps_normal and @abs(s0.b01 - r0.b01) <= eps_normal and @abs(s0.b02 - r0.b02) <= eps_normal and @abs(s0.b12 - r0.b12) <= eps_normal)) return error.TestUnexpectedResult;
 
     // t=1 → r1
     const s1 = Rot3.slerp(r0, r1, 1);
-    if (!approx_normal.eql(s1, r1)) return error.TestUnexpectedResult;
+    if (!(@abs(s1.a - r1.a) <= eps_normal and @abs(s1.b01 - r1.b01) <= eps_normal and @abs(s1.b02 - r1.b02) <= eps_normal and @abs(s1.b12 - r1.b12) <= eps_normal)) return error.TestUnexpectedResult;
 
     // t=0.5 → 45° around z
     const smid = Rot3.slerp(r0, r1, 0.5);
     const expected = Rot3.fromAxisAngle(pi / 4.0, e3);
-    if (!approx_normal.eql(smid, expected)) return error.TestUnexpectedResult;
+    if (!(@abs(smid.a - expected.a) <= eps_normal and @abs(smid.b01 - expected.b01) <= eps_normal and @abs(smid.b02 - expected.b02) <= eps_normal and @abs(smid.b12 - expected.b12) <= eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Mat3: translation (2D homogeneous)" {
     const t = Mat3.translation(Vec2.init(.{ 5, 7 }));
 
     // Identity with last column set to (5, 7, 1)
-    try std.testing.expect(t.col(0).eql(Vec3.init(.{ 1, 0, 0 })));
-    try std.testing.expect(t.col(1).eql(Vec3.init(.{ 0, 1, 0 })));
-    try std.testing.expect(t.col(2).eql(Vec3.init(.{ 5, 7, 1 })));
+    try std.testing.expect(t.col(0).eql(Vec3.init(.{ 1, 0, 0 }), 0));
+    try std.testing.expect(t.col(1).eql(Vec3.init(.{ 0, 1, 0 }), 0));
+    try std.testing.expect(t.col(2).eql(Vec3.init(.{ 5, 7, 1 }), 0));
 
     // Translating a 2D point (w=1)
     const p = Vec3.init(.{ 1, 2, 1 });
-    try std.testing.expect(t.mulVec(p).eql(Vec3.init(.{ 6, 9, 1 })));
+    try std.testing.expect(t.mulVec(p).eql(Vec3.init(.{ 6, 9, 1 }), 0));
 
     // Direction (w=0) unaffected
     const d = Vec3.init(.{ 1, 0, 0 });
-    try std.testing.expect(t.mulVec(d).eql(d));
+    try std.testing.expect(t.mulVec(d).eql(d, 0));
 }
 
 test "Mat4: translation" {
     const t = Mat4.translation(Vec3.init(.{ 3, 4, 5 }));
 
     // Should be identity with column 3 set to (3, 4, 5, 1)
-    try std.testing.expect(t.col(0).eql(Vec4.init(.{ 1, 0, 0, 0 })));
-    try std.testing.expect(t.col(1).eql(Vec4.init(.{ 0, 1, 0, 0 })));
-    try std.testing.expect(t.col(2).eql(Vec4.init(.{ 0, 0, 1, 0 })));
-    try std.testing.expect(t.col(3).eql(Vec4.init(.{ 3, 4, 5, 1 })));
+    try std.testing.expect(t.col(0).eql(Vec4.init(.{ 1, 0, 0, 0 }), 0));
+    try std.testing.expect(t.col(1).eql(Vec4.init(.{ 0, 1, 0, 0 }), 0));
+    try std.testing.expect(t.col(2).eql(Vec4.init(.{ 0, 0, 1, 0 }), 0));
+    try std.testing.expect(t.col(3).eql(Vec4.init(.{ 3, 4, 5, 1 }), 0));
 
     // Translating a point (w=1)
     const p = Vec4.init(.{ 1, 2, 3, 1 });
     const tp = t.mulVec(p);
-    try std.testing.expect(tp.eql(Vec4.init(.{ 4, 6, 8, 1 })));
+    try std.testing.expect(tp.eql(Vec4.init(.{ 4, 6, 8, 1 }), 0));
 
     // Translating a direction (w=0) should not change it
     const d = Vec4.init(.{ 1, 0, 0, 0 });
-    try std.testing.expect(t.mulVec(d).eql(d));
+    try std.testing.expect(t.mulVec(d).eql(d, 0));
 }
 
 test "Mat2: scaling" {
     const s = Mat2.scaling(Vec2.init(.{ 3, 5 }));
-    try std.testing.expect(s.col(0).eql(Vec2.init(.{ 3, 0 })));
-    try std.testing.expect(s.col(1).eql(Vec2.init(.{ 0, 5 })));
+    try std.testing.expect(s.col(0).eql(Vec2.init(.{ 3, 0 }), 0));
+    try std.testing.expect(s.col(1).eql(Vec2.init(.{ 0, 5 }), 0));
 
     const v = Vec2.init(.{ 2, 4 });
-    try std.testing.expect(s.mulVec(v).eql(Vec2.init(.{ 6, 20 })));
+    try std.testing.expect(s.mulVec(v).eql(Vec2.init(.{ 6, 20 }), 0));
 }
 
 test "Mat3: scaling (2D homogeneous)" {
     const s = Mat3.scaling(Vec2.init(.{ 2, 3 }));
-    try std.testing.expect(s.col(0).eql(Vec3.init(.{ 2, 0, 0 })));
-    try std.testing.expect(s.col(1).eql(Vec3.init(.{ 0, 3, 0 })));
-    try std.testing.expect(s.col(2).eql(Vec3.init(.{ 0, 0, 1 })));
+    try std.testing.expect(s.col(0).eql(Vec3.init(.{ 2, 0, 0 }), 0));
+    try std.testing.expect(s.col(1).eql(Vec3.init(.{ 0, 3, 0 }), 0));
+    try std.testing.expect(s.col(2).eql(Vec3.init(.{ 0, 0, 1 }), 0));
 
     // Scale a 2D point (w=1)
     const p = Vec3.init(.{ 4, 5, 1 });
-    try std.testing.expect(s.mulVec(p).eql(Vec3.init(.{ 8, 15, 1 })));
+    try std.testing.expect(s.mulVec(p).eql(Vec3.init(.{ 8, 15, 1 }), 0));
 }
 
 test "Mat4: scaling" {
     const s = Mat4.scaling(Vec3.init(.{ 2, 3, 4 }));
 
     // Diagonal should be (2, 3, 4, 1)
-    try std.testing.expect(s.col(0).eql(Vec4.init(.{ 2, 0, 0, 0 })));
-    try std.testing.expect(s.col(1).eql(Vec4.init(.{ 0, 3, 0, 0 })));
-    try std.testing.expect(s.col(2).eql(Vec4.init(.{ 0, 0, 4, 0 })));
-    try std.testing.expect(s.col(3).eql(Vec4.init(.{ 0, 0, 0, 1 })));
+    try std.testing.expect(s.col(0).eql(Vec4.init(.{ 2, 0, 0, 0 }), 0));
+    try std.testing.expect(s.col(1).eql(Vec4.init(.{ 0, 3, 0, 0 }), 0));
+    try std.testing.expect(s.col(2).eql(Vec4.init(.{ 0, 0, 4, 0 }), 0));
+    try std.testing.expect(s.col(3).eql(Vec4.init(.{ 0, 0, 0, 1 }), 0));
 
     const v = Vec4.init(.{ 1, 1, 1, 1 });
-    try std.testing.expect(s.mulVec(v).eql(Vec4.init(.{ 2, 3, 4, 1 })));
+    try std.testing.expect(s.mulVec(v).eql(Vec4.init(.{ 2, 3, 4, 1 }), 0));
 }
 
 test "Mat4: lookAt" {
@@ -2477,7 +2470,7 @@ test "Mat2: rotation" {
     try std.testing.expect(@abs(rv.v[1] - 1.0) < eps);
 
     // 0° should be identity
-    try std.testing.expect(Mat2.rotation(0).eql(Mat2.identity));
+    try std.testing.expect(Mat2.rotation(0).eql(Mat2.identity, 0));
 }
 
 test "Mat3: rotation (2D homogeneous)" {
@@ -2523,7 +2516,7 @@ test "Mat4: rotation (axis-angle)" {
     try std.testing.expect(@abs(rxv.v[2] - 1.0) < eps);
 
     // Identity rotation (0 angle)
-    try std.testing.expect(Mat4.rotation(e3, 0).eql(Mat4.identity));
+    try std.testing.expect(Mat4.rotation(e3, 0).eql(Mat4.identity, 0));
 }
 
 test "Mat3: fromMat4" {
@@ -2535,9 +2528,9 @@ test "Mat3: fromMat4" {
         Vec4.init(.{ 13, 14, 15, 1 }),
     });
     const m3 = Mat3.fromMat4(m4);
-    try std.testing.expect(m3.col(0).eql(Vec3.init(.{ 1, 2, 3 })));
-    try std.testing.expect(m3.col(1).eql(Vec3.init(.{ 5, 6, 7 })));
-    try std.testing.expect(m3.col(2).eql(Vec3.init(.{ 9, 10, 11 })));
+    try std.testing.expect(m3.col(0).eql(Vec3.init(.{ 1, 2, 3 }), 0));
+    try std.testing.expect(m3.col(1).eql(Vec3.init(.{ 5, 6, 7 }), 0));
+    try std.testing.expect(m3.col(2).eql(Vec3.init(.{ 9, 10, 11 }), 0));
 
     // Roundtrip: rotation Mat4 → Mat3 should match Rotor3.toMat3
     const pi = math.pi;
@@ -2545,7 +2538,7 @@ test "Mat3: fromMat4" {
     const rot4 = Mat4.rotation(axis, pi / 3.0);
     const rot3 = Mat3.fromMat4(rot4);
     const rotor = Rot3.fromAxisAngle(pi / 3.0, axis);
-    if (!approx_normal.eql(rot3, rotor.toMat3())) return error.TestUnexpectedResult;
+    if (!rot3.eql(rotor.toMat3(), eps_normal)) return error.TestUnexpectedResult;
 }
 
 test "Rotor3: fromEuler basic" {
@@ -2556,15 +2549,15 @@ test "Rotor3: fromEuler basic" {
 
     // Pure yaw 90° around y: e1 → -e3
     const r_yaw = Rot3.fromEuler(pi / 2.0, 0, 0);
-    if (!approx_normal.eql(r_yaw.rotate(e1), Vec3.init(.{ 0, 0, -1 }))) return error.TestUnexpectedResult;
+    if (!r_yaw.rotate(e1).eql(Vec3.init(.{ 0, 0, -1 }), eps_normal)) return error.TestUnexpectedResult;
 
     // Pure pitch 90° around x: e2 → e3
     const r_pitch = Rot3.fromEuler(0, pi / 2.0, 0);
-    if (!approx_normal.eql(r_pitch.rotate(e2), e3)) return error.TestUnexpectedResult;
+    if (!r_pitch.rotate(e2).eql(e3, eps_normal)) return error.TestUnexpectedResult;
 
     // Pure roll 90° around z: e1 → e2
     const r_roll = Rot3.fromEuler(0, 0, pi / 2.0);
-    if (!approx_normal.eql(r_roll.rotate(e1), e2)) return error.TestUnexpectedResult;
+    if (!r_roll.rotate(e1).eql(e2, eps_normal)) return error.TestUnexpectedResult;
 }
 
 // ── Versor2 tests ──
@@ -2572,7 +2565,7 @@ test "Rotor3: fromEuler basic" {
 test "Versor2: identity" {
     const v = Vec2.init(.{ 3, 4 });
     const result = Versor2.identity.apply(v);
-    try std.testing.expect(approx_normal.eql(result, v));
+    try std.testing.expect(result.eql(v, eps_normal));
 }
 
 test "Versor2: rotation matches Rot2" {
@@ -2583,7 +2576,7 @@ test "Versor2: rotation matches Rot2" {
     const rot = Rot2.fromAngle(angle);
     const versor = Versor2.fromAngle(angle);
 
-    try std.testing.expect(approx_normal.eql(rot.rotate(v), versor.apply(v)));
+    try std.testing.expect(rot.rotate(v).eql(versor.apply(v), eps_normal));
 }
 
 test "Versor2: reflection across Y axis" {
@@ -2591,14 +2584,14 @@ test "Versor2: reflection across Y axis" {
     const refl = Versor2.fromReflection(Vec2.init(.{ 1, 0 }));
     const v = Vec2.init(.{ 3, 4 });
     const result = refl.apply(v);
-    try std.testing.expect(approx_normal.eql(result, Vec2.init(.{ -3, 4 })));
+    try std.testing.expect(result.eql(Vec2.init(.{ -3, 4 }), eps_normal));
     try std.testing.expectEqual(Versor2.Parity.odd, refl.parity);
 }
 
 test "Versor2: reflection across X axis" {
     const refl = Versor2.fromReflection(Vec2.init(.{ 0, 1 }));
     const result = refl.apply(Vec2.init(.{ 3, 4 }));
-    try std.testing.expect(approx_normal.eql(result, Vec2.init(.{ 3, -4 })));
+    try std.testing.expect(result.eql(Vec2.init(.{ 3, -4 }), eps_normal));
 }
 
 test "Versor2: two reflections compose to rotation" {
@@ -2610,7 +2603,7 @@ test "Versor2: two reflections compose to rotation" {
 
     const v = Vec2.init(.{ 3, 4 });
     const result = composed.apply(v);
-    try std.testing.expect(approx_normal.eql(result, Vec2.init(.{ -3, -4 })));
+    try std.testing.expect(result.eql(Vec2.init(.{ -3, -4 }), eps_normal));
 }
 
 test "Versor2: mul applies b first then a" {
@@ -2622,7 +2615,7 @@ test "Versor2: mul applies b first then a" {
     const step1 = refl.apply(v); // (-1, 0)
     const step2 = rot.apply(step1); // (0, -1)
     const result = composed.apply(v);
-    try std.testing.expect(approx_normal.eql(result, step2));
+    try std.testing.expect(result.eql(step2, eps_normal));
 }
 
 test "Versor2: roundtrip toRotor/fromRotor" {
@@ -2630,23 +2623,23 @@ test "Versor2: roundtrip toRotor/fromRotor" {
     const rot = Rot2.fromAngle(angle);
     const versor = Versor2.fromRotor(rot);
     const back = versor.toRotor().?;
-    try std.testing.expect(approx_normal.eql(rot.a, back.a));
-    try std.testing.expect(approx_normal.eql(rot.b, back.b));
+    try std.testing.expect(@abs(rot.a - back.a) <= eps_normal);
+    try std.testing.expect(@abs(rot.b - back.b) <= eps_normal);
 }
 
 test "Versor2: toMat2 rotation" {
     const angle: f32 = math.pi / 4.0;
     const versor = Versor2.fromAngle(angle);
     const rot = Rot2.fromAngle(angle);
-    try std.testing.expect(approx_normal.eql(versor.toMat2(), rot.toMat2()));
+    try std.testing.expect(versor.toMat2().eql(rot.toMat2(), eps_normal));
 }
 
 test "Versor2: toMat2 reflection" {
     const refl = Versor2.fromReflection(Vec2.init(.{ 1, 0 }));
     const m = refl.toMat2();
     // Should be diag(-1, 1)
-    try std.testing.expect(approx_normal.eql(m.m[0][0], @as(f32, -1)));
-    try std.testing.expect(approx_normal.eql(m.m[1][1], @as(f32, 1)));
+    try std.testing.expect(@abs(m.m[0][0] - @as(f32, -1)) <= eps_normal);
+    try std.testing.expect(@abs(m.m[1][1] - @as(f32, 1)) <= eps_normal);
 }
 
 test "Versor2: slerp endpoints" {
@@ -2655,8 +2648,8 @@ test "Versor2: slerp endpoints" {
     const s0 = Versor2.slerp(r0, r1, 0);
     const s1 = Versor2.slerp(r0, r1, 1);
     const v = Vec2.init(.{ 1, 0 });
-    try std.testing.expect(approx_normal.eql(s0.apply(v), r0.apply(v)));
-    try std.testing.expect(approx_normal.eql(s1.apply(v), r1.apply(v)));
+    try std.testing.expect(s0.apply(v).eql(r0.apply(v), eps_normal));
+    try std.testing.expect(s1.apply(v).eql(r1.apply(v), eps_normal));
 }
 
 test "Versor2: slerp between reflections" {
@@ -2665,7 +2658,7 @@ test "Versor2: slerp between reflections" {
     const mid = Versor2.slerp(r0, r1, 0.5);
     try std.testing.expectEqual(Versor2.Parity.odd, mid.parity);
     // Midpoint should be unit length
-    try std.testing.expect(approx_normal.eql(mid.lenSqr(), @as(f32, 1.0)));
+    try std.testing.expect(@abs(mid.lenSqr() - @as(f32, 1.0)) <= eps_normal);
 }
 
 // ── Versor3 tests ──
@@ -2673,7 +2666,7 @@ test "Versor2: slerp between reflections" {
 test "Versor3: identity" {
     const v = Vec3.init(.{ 3, 4, 5 });
     const result = Versor3.identity.apply(v);
-    try std.testing.expect(approx_normal.eql(result, v));
+    try std.testing.expect(result.eql(v, eps_normal));
 }
 
 test "Versor3: rotation matches Rot3" {
@@ -2685,7 +2678,7 @@ test "Versor3: rotation matches Rot3" {
     const rot = Rot3.fromAxisAngle(angle, axis);
     const versor = Versor3.fromRotor(rot);
 
-    try std.testing.expect(approx_normal.eql(rot.rotate(v), versor.apply(v)));
+    try std.testing.expect(rot.rotate(v).eql(versor.apply(v), eps_normal));
 }
 
 test "Versor3: fromAxisAngle matches Rot3 rotation" {
@@ -2696,31 +2689,31 @@ test "Versor3: fromAxisAngle matches Rot3 rotation" {
     // 90° around Y: (1,0,0) → (0,0,-1)
     const versor = Versor3.fromAxisAngle(pi / 2.0, axis);
     const result = versor.apply(v);
-    try std.testing.expect(approx_normal.eql(result, Vec3.init(.{ 0, 0, -1 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ 0, 0, -1 }), eps_normal));
 
     // Also verify via Rot3
     const rot = Rot3.fromAxisAngle(pi / 2.0, axis);
-    try std.testing.expect(approx_normal.eql(result, rot.rotate(v)));
+    try std.testing.expect(result.eql(rot.rotate(v), eps_normal));
 }
 
 test "Versor3: reflection across YZ plane" {
     const refl = Versor3.fromReflection(Vec3.init(.{ 1, 0, 0 }));
     const v = Vec3.init(.{ 3, 4, 5 });
     const result = refl.apply(v);
-    try std.testing.expect(approx_normal.eql(result, Vec3.init(.{ -3, 4, 5 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ -3, 4, 5 }), eps_normal));
     try std.testing.expectEqual(Versor3.Parity.odd, refl.parity);
 }
 
 test "Versor3: reflection across XZ plane" {
     const refl = Versor3.fromReflection(Vec3.init(.{ 0, 1, 0 }));
     const result = refl.apply(Vec3.init(.{ 3, 4, 5 }));
-    try std.testing.expect(approx_normal.eql(result, Vec3.init(.{ 3, -4, 5 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ 3, -4, 5 }), eps_normal));
 }
 
 test "Versor3: reflection across XY plane" {
     const refl = Versor3.fromReflection(Vec3.init(.{ 0, 0, 1 }));
     const result = refl.apply(Vec3.init(.{ 3, 4, 5 }));
-    try std.testing.expect(approx_normal.eql(result, Vec3.init(.{ 3, 4, -5 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ 3, 4, -5 }), eps_normal));
 }
 
 test "Versor3: two reflections compose to rotation" {
@@ -2732,7 +2725,7 @@ test "Versor3: two reflections compose to rotation" {
     // Two perpendicular reflections = 180° rotation around Z
     const v = Vec3.init(.{ 1, 0, 0 });
     const result = composed.apply(v);
-    try std.testing.expect(approx_normal.eql(result, Vec3.init(.{ -1, 0, 0 })));
+    try std.testing.expect(result.eql(Vec3.init(.{ -1, 0, 0 }), eps_normal));
 }
 
 test "Versor3: mul applies b first then a" {
@@ -2744,7 +2737,7 @@ test "Versor3: mul applies b first then a" {
     const step1 = refl.apply(v);
     const step2 = rot.apply(step1);
     const result = composed.apply(v);
-    try std.testing.expect(approx_normal.eql(result, step2));
+    try std.testing.expect(result.eql(step2, eps_normal));
 }
 
 test "Versor3: three-way composition" {
@@ -2760,7 +2753,7 @@ test "Versor3: three-way composition" {
     const step2 = r2.apply(step1);
     const step3 = r3.apply(step2);
     const result = composed.apply(v);
-    try std.testing.expect(approx_loose.eql(result, step3));
+    try std.testing.expect(result.eql(step3, eps_loose));
 }
 
 test "Versor3: roundtrip toRotor/fromRotor" {
@@ -2769,10 +2762,10 @@ test "Versor3: roundtrip toRotor/fromRotor" {
     const rot = Rot3.fromAxisAngle(angle, axis.normalize());
     const versor = Versor3.fromRotor(rot);
     const back = versor.toRotor().?;
-    try std.testing.expect(approx_normal.eql(rot.a, back.a));
-    try std.testing.expect(approx_normal.eql(rot.b01, back.b01));
-    try std.testing.expect(approx_normal.eql(rot.b02, back.b02));
-    try std.testing.expect(approx_normal.eql(rot.b12, back.b12));
+    try std.testing.expect(@abs(rot.a - back.a) <= eps_normal);
+    try std.testing.expect(@abs(rot.b01 - back.b01) <= eps_normal);
+    try std.testing.expect(@abs(rot.b02 - back.b02) <= eps_normal);
+    try std.testing.expect(@abs(rot.b12 - back.b12) <= eps_normal);
 }
 
 test "Versor3: toRotor returns null for odd" {
@@ -2785,7 +2778,7 @@ test "Versor3: toMat3 rotation matches Rot3" {
     const angle: f32 = math.pi / 3.0;
     const versor = Versor3.fromAxisAngle(angle, axis);
     const rot = Rot3.fromAxisAngle(angle, axis);
-    try std.testing.expect(approx_normal.eql(versor.toMat3(), rot.toMat3()));
+    try std.testing.expect(versor.toMat3().eql(rot.toMat3(), eps_normal));
 }
 
 test "Versor3: toMat3 reflection has det = -1" {
@@ -2793,16 +2786,16 @@ test "Versor3: toMat3 reflection has det = -1" {
     const m = refl.toMat3();
     // det of reflection across YZ = -1
     // m should be diag(-1, 1, 1)
-    try std.testing.expect(approx_normal.eql(m.m[0][0], @as(f32, -1)));
-    try std.testing.expect(approx_normal.eql(m.m[1][1], @as(f32, 1)));
-    try std.testing.expect(approx_normal.eql(m.m[2][2], @as(f32, 1)));
+    try std.testing.expect(@abs(m.m[0][0] - @as(f32, -1)) <= eps_normal);
+    try std.testing.expect(@abs(m.m[1][1] - @as(f32, 1)) <= eps_normal);
+    try std.testing.expect(@abs(m.m[2][2] - @as(f32, 1)) <= eps_normal);
 }
 
 test "Versor3: reflection preserves length" {
     const refl = Versor3.fromReflection(Vec3.init(.{ 0.5774, 0.5774, 0.5774 }).normalize());
     const v = Vec3.init(.{ 3, 4, 5 });
     const result = refl.apply(v);
-    try std.testing.expect(approx_normal.eql(v.len(), result.len()));
+    try std.testing.expect(@abs(v.len() - result.len()) <= eps_normal);
 }
 
 test "Versor3: reverse inverts transformation" {
@@ -2810,7 +2803,7 @@ test "Versor3: reverse inverts transformation" {
     const v = Vec3.init(.{ 1, 2, 3 });
     const forward = versor.apply(v);
     const back = versor.reverse().apply(forward);
-    try std.testing.expect(approx_normal.eql(back, v));
+    try std.testing.expect(back.eql(v, eps_normal));
 }
 
 test "Versor3: reverse inverts reflection" {
@@ -2818,7 +2811,7 @@ test "Versor3: reverse inverts reflection" {
     const v = Vec3.init(.{ 1, 2, 3 });
     const forward = refl.apply(v);
     const back = refl.reverse().apply(forward);
-    try std.testing.expect(approx_normal.eql(back, v));
+    try std.testing.expect(back.eql(v, eps_normal));
 }
 
 test "Versor3: slerp endpoints" {
@@ -2827,7 +2820,7 @@ test "Versor3: slerp endpoints" {
     const s1 = Versor3.slerp(r0, r1, 1);
     // At t=1, should match r1
     const v = Vec3.init(.{ 1, 0, 0 });
-    try std.testing.expect(approx_normal.eql(s1.apply(v), r1.apply(v)));
+    try std.testing.expect(s1.apply(v).eql(r1.apply(v), eps_normal));
 }
 
 test "Versor3: slerp between reflections" {
@@ -2835,7 +2828,7 @@ test "Versor3: slerp between reflections" {
     const r1 = Versor3.fromReflection(Vec3.init(.{ 0, 1, 0 }));
     const mid = Versor3.slerp(r0, r1, 0.5);
     try std.testing.expectEqual(Versor3.Parity.odd, mid.parity);
-    try std.testing.expect(approx_normal.eql(mid.lenSqr(), @as(f32, 1.0)));
+    try std.testing.expect(@abs(mid.lenSqr() - @as(f32, 1.0)) <= eps_normal);
 }
 
 test "Versor3: det" {
